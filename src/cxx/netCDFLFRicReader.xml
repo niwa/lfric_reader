@@ -1,0 +1,32 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="sources">
+    <!-- ================================================================== -->
+
+    <SourceProxy name="vtkNetCDFLFRicReader" class="vtkNetCDFLFRicReader" label="NetCDFLFRicReader">
+
+      <Documentation
+        long_help="Reads LFRic data from a netCDF file in UGRID format."
+        short_help="Reads LFRic data.">
+      </Documentation>
+
+      <StringVectorProperty
+        name="FileName"
+        command="SetFileName"
+        animateable="0"
+        number_of_elements="1">
+        <FileListDomain name="files"/>
+        <Documentation>
+          This property specifies the netCDF file name for the LFRic reader.
+        </Documentation>
+      </StringVectorProperty>
+
+      <Hints>
+        <ReaderFactory extensions="nc"
+                      file_description="LFRic netCDF Reader" />
+      </Hints>
+
+    </SourceProxy>
+    <!-- End NetCDFLFRicReader -->
+  </ProxyGroup>
+  <!-- End Filters Group -->
+</ServerManagerConfiguration>
