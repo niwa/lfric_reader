@@ -15,6 +15,9 @@
 #include <vtkUnstructuredGrid.h>
 #include <vtk_netcdf.h>
 
+#include <vector>
+
+// Set automatically with PV plugin debug?
 #define DEBUG 1
 
 class VTKIONETCDF_EXPORT vtkNetCDFLFRicReader : public vtkUnstructuredGridAlgorithm {
@@ -48,9 +51,9 @@ protected:
 
   // Utility functions
   size_t getNCDim(const int ncid, const char * dimname);
-  // FIXME: use rvalue here
-  int getNCVar(const int ncid, const char * varname, const nc_type expect_vartype,
-               const int expect_ndims, const size_t start [], const size_t count [], void * buffer);
+
+  std::vector<double> getNCVarDouble(const int ncid, const char * varname, const std::initializer_list<size_t> start, const std::initializer_list<size_t> count);
+  std::vector<unsigned long long> getNCVarULongLong(const int ncid, const char * varname, const std::initializer_list<size_t> start, const std::initializer_list<size_t> count);
 
   char *FileName;
 

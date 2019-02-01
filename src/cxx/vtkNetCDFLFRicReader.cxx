@@ -20,7 +20,6 @@
     if (errorcode != NC_NOERR) \
     { \
       vtkErrorMacro(<< "netCDF Error: " << nc_strerror(errorcode)); \
-      return 0; \
     } \
 }
 
@@ -207,26 +206,61 @@ size_t vtkNetCDFLFRicReader::getNCDim(const int ncid, const char * dimname) {
   return dim;
 }
 
-int vtkNetCDFLFRicReader::getNCVar(const int ncid, const char * varname, const nc_type expect_vartype,
-                                   const int expect_ndims, const size_t start [], const size_t count [], void * buffer)
+std::vector<double> vtkNetCDFLFRicReader::getNCVarDouble(const int ncid, const char * varname, const std::initializer_list<size_t> start, const std::initializer_list<size_t> count)
 {
-  vtkDebugMacro("getNCVar: varname=" << varname << endl);
+  vtkDebugMacro("getNCVarDouble: varname=" << varname << endl);
+
+  // Find variable by name
   int varid;
   CALL_NETCDF(nc_inq_varid(ncid, varname, &varid));
-  int actual_ndims, dimids[NC_MAX_VAR_DIMS];
-  nc_type actual_vartype;
-  CALL_NETCDF(nc_inq_var(ncid, varid, NULL, &actual_vartype, &actual_ndims, dimids, NULL));
-  // FIXME: check dimids here
-  if( (actual_vartype != expect_vartype) || (actual_ndims != expect_ndims) ) // || (dimids[0] != nnodes_dimid) )
+
+  // Compute total number of elements to read
+  size_t size = 1;
+  for (size_t n : count)
   {
-    vtkErrorMacro("Variable " << varname << ": unexpected type, shape, or dimension." << endl);
-    return 0;
+    size *= n;
   }
-  CALL_NETCDF(nc_get_vara(ncid, varid, start, count, buffer));
-  return 1;
+
+  std::vector<double> vardata;
+  vardata.resize(size);
+
+  vtkDebugMacro("getNCVarDouble: reading size=" << size << " elements" << endl);
+
+  // netCDF will automatically convert non-double numeric data into double
+  // initialiser_list.begin() should give us access to a simple array
+  CALL_NETCDF(nc_get_vara_double(ncid, varid, start.begin(), count.begin(), vardata.data()));
+
+  return vardata;
+}
+
+std::vector<unsigned long long> vtkNetCDFLFRicReader::getNCVarULongLong(const int ncid, const char * varname, const std::initializer_list<size_t> start, const std::initializer_list<size_t> count)
+{
+  vtkDebugMacro("getNCVarULongLong: varname=" << varname << endl);
+
+  int varid;
+  CALL_NETCDF(nc_inq_varid(ncid, varname, &varid));
+
+  size_t size = 1;
+  for (size_t n : count)
+  {
+    size *= n;
+  }
+
+  std::vector<unsigned long long> vardata;
+  vardata.resize(size);
+
+  vtkDebugMacro("getNCVarDouble: reading size=" << size << " elements" << endl);
+
+  // netCDF will automatically convert non-double numeric data into unsigned long long
+  CALL_NETCDF(nc_get_vara_ulonglong(ncid, varid, start.begin(), count.begin(), vardata.data()));
+
+  return vardata;
 }
 
 // Read UGRID description from netCDF file and build VTK grid
+// The VTK grid replicates the "full level face grid" in the
+// LFRic output file, data that is stored on the other grids
+// is mapped onto this VTK grid
 int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *grid)
 {
   vtkDebugMacro("Entering CreateVTKGrid..." << endl);
@@ -237,81 +271,53 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
     return 0;
   }
 
-  // Get number of nodes
-  //  int nnodes_dimid;
+  // Get number of nodes in full level face grid
   size_t nnodes = getNCDim(ncid, "nMesh2d_full_levels_node");
   vtkDebugMacro("nnodes=" << nnodes << endl);
 
-  // Get number of levels
-  //  int nlevels_dimid;
+  // Get number of levels in full level face grid
   size_t nlevels = getNCDim(ncid, "full_levels_faces");
   this->NumberOfLevels = nlevels;
   vtkDebugMacro("nlevels=" << nlevels << endl);
 
-  // Get number of faces
-  //  int nfaces_dimid;
+  // Get number of faces in full level face grid
   size_t nfaces = getNCDim(ncid, "nMesh2d_full_levels_face");
   this->NumberOfFaces2D = nfaces;
   vtkDebugMacro("nfaces=" << nfaces << endl);
 
-  // Get number of vertices per face
-  //  int nverts_per_face_dimid;
+  // Get number of vertices per face in full levels face grid
   size_t nverts_per_face = getNCDim(ncid, "nMesh2d_full_levels_vertex");
   vtkDebugMacro("nverts_per_face=" << nverts_per_face << endl);
 
-  // Create memory buffers for grid description
-  float *node_coords_x = new float[nnodes];
-  float *node_coords_y = new float[nnodes];
-  float *levels = new float[nlevels];
-  int *face_nodes = new int[nfaces*nverts_per_face];
+  // Get x (lon) and y (lat) coordinates of grid nodes
+  std::vector<double> node_coords_x = getNCVarDouble(ncid, "Mesh2d_full_levels_node_x", {0}, {nnodes});
+  std::vector<double> node_coords_y = getNCVarDouble(ncid, "Mesh2d_full_levels_node_y", {0}, {nnodes});
 
-  // Get x coordinates
-  {
-    size_t start[] = {0};
-    size_t count[] = {nnodes};
-    getNCVar(ncid, "Mesh2d_full_levels_node_x", NC_FLOAT, 1, start, count, node_coords_x);
-  }
+  // Get vertical level heights
+  std::vector<double> levels = getNCVarDouble(ncid, "full_levels_faces", {0}, {nlevels});
 
-  // Get y coordinates
-  {
-    size_t start[] = {0};
-    size_t count[] = {nnodes};
-    getNCVar(ncid, "Mesh2d_full_levels_node_y", NC_FLOAT, 1, start, count, node_coords_y);
-  }
-
-  // Get vertical levels
-  {
-    size_t start[] = {0};
-    size_t count[] = {nlevels};
-    getNCVar(ncid, "full_levels_faces", NC_FLOAT, 1, start, count, levels);
-  }
-
-  // Node connectivity
-  {
-    size_t start[] = {0,0};
-    size_t count[] = {nfaces,nverts_per_face};
-    getNCVar(ncid, "Mesh2d_full_levels_face_nodes", NC_INT, 2, start, count, face_nodes);
-  }
+  // Get node connectivity of full level face grid
+  std::vector<unsigned long long> face_nodes = getNCVarULongLong(ncid, "Mesh2d_full_levels_face_nodes", {0,0}, {nfaces,nverts_per_face});
 
   vtkDebugMacro("Setting VTK points..." << endl);
 
-  // Set grid points
+  // Set VTK grid points
   vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
   for (size_t ilevel = 0; ilevel < nlevels; ilevel++)
   {
     for (size_t inode = 0; inode < nnodes; inode++)
     {
       // Avoid zero level height
-      const float level_shift = 0.5;
+      const double level_shift = 0.5;
 
-      const float coords[3] = {node_coords_x[inode],
-                               node_coords_y[inode],
-			       levels[ilevel] + level_shift};
+      const double coords[3] = {node_coords_x[inode],
+                                node_coords_y[inode],
+                                levels[ilevel] + level_shift};
 
       // Convert from lon-lat-rad to xyz coordinates
-      const float xyz[3] = {coords[2]*cosf(coords[0]/180.0*M_PI)*cosf(coords[1]/180.0*M_PI),
-			    coords[2]*sinf(coords[0]/180.0*M_PI)*cosf(coords[1]/180.0*M_PI),
-                            coords[2]*sinf(coords[1]/180.0*M_PI)};
+      const double xyz[3] = {coords[2]*cosf(coords[0]/180.0*M_PI)*cosf(coords[1]/180.0*M_PI),
+                             coords[2]*sinf(coords[0]/180.0*M_PI)*cosf(coords[1]/180.0*M_PI),
+                             coords[2]*sinf(coords[1]/180.0*M_PI)};
 
       points->InsertNextPoint(xyz);
     }
@@ -330,17 +336,14 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
       vtkIdType cell_verts[2*nverts_per_face];
       for (size_t ivertex = 0; ivertex < nverts_per_face; ivertex++)
       {
-        cell_verts[ivertex] = face_nodes[iface*nverts_per_face + ivertex] + ilevel*nnodes;
-	cell_verts[ivertex+nverts_per_face] = cell_verts[ivertex] + nnodes;
+        cell_verts[ivertex] = static_cast<vtkIdType>(face_nodes[iface*nverts_per_face + ivertex]) +
+                              static_cast<vtkIdType>(ilevel*nnodes);
+        cell_verts[ivertex+nverts_per_face] = static_cast<vtkIdType>(cell_verts[ivertex]) +
+                                              static_cast<vtkIdType>(nnodes);
       }
       grid->InsertNextCell(VTK_HEXAHEDRON, static_cast<vtkIdType>(2*nverts_per_face), cell_verts);
     }
   }
-
-  delete []node_coords_x;
-  delete []node_coords_y;
-  delete []levels;
-  delete []face_nodes;
 
   vtkDebugMacro("Finished CreateVTKGrid" << endl);
 
@@ -376,7 +379,7 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid)
       char name[NC_MAX_NAME+1];
       CALL_NETCDF(nc_inq_varname(ncid, ivar, name));
 
-      // Don't read UGRID mesh description and time axis
+      // Ignore UGRID mesh description and time axis
       if ( (strstr(name, "Mesh2d_") == nullptr) &&
 	   (strstr(name, "half_levels_") == nullptr) &&
 	   (strstr(name, "full_levels_") == nullptr) &&
