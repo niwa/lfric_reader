@@ -38,10 +38,9 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->SetNumberOfInputPorts(0);
   this->SetNumberOfOutputPorts(1);
   this->FileName = nullptr;
-  this->TimeSteps = nullptr;
-  this->NumberOfTimeSteps = 0;
   this->NumberOfLevels = 0;
   this->NumberOfFaces2D = 0;
+  this->NumberOfEdges2D = 0;
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader constructor" << endl);
 }
@@ -52,8 +51,6 @@ vtkNetCDFLFRicReader::~vtkNetCDFLFRicReader()
   vtkDebugMacro("Entering vtkNetCDFLFRicReader destructor..." << endl);
 
   this->SetFileName(nullptr);
-  delete []this->TimeSteps;
-  this->TimeSteps = nullptr;
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader destructor" << endl);
 }
@@ -66,7 +63,7 @@ void vtkNetCDFLFRicReader::PrintSelf(ostream& os, vtkIndent indent) {
      << (this->FileName ? this->FileName : "(nullptr)") << endl;
 
   os << indent << "NumberOfTimeSteps: "
-     << this->NumberOfTimeSteps << endl;
+     << this->TimeSteps.size() << endl;
 
 }
 
@@ -88,40 +85,27 @@ int vtkNetCDFLFRicReader::RequestInformation(
   }
   vtkDebugMacro("FileName=" << this->FileName << endl);
 
-  int mode = NC_NOWRITE;
   int ncid;
-  CALL_NETCDF(nc_open(this->FileName, mode, &ncid));
+  CALL_NETCDF(nc_open(this->FileName, NC_NOWRITE, &ncid));
 
   // Get number of time steps
-  int dimid;
-  CALL_NETCDF(nc_inq_dimid(ncid, "time_counter", &dimid));
-  size_t size;
-  CALL_NETCDF(nc_inq_dimlen(ncid, dimid, &size));
-  this->NumberOfTimeSteps = size;
-  vtkDebugMacro("Number of time steps in file=" << this->NumberOfTimeSteps << endl);
+  size_t NumberOfTimeSteps = getNCDim(ncid, "time_counter");
+  vtkDebugMacro("Number of time steps in file=" << NumberOfTimeSteps << endl);
 
   vtkInformation *outInfo = outputVector->GetInformationObject(0);
 
-  // Read time steps array, if available
-  if (this->NumberOfTimeSteps > 0)
+  // Read time steps array, if available, and tell the pipeline
+  TimeSteps.clear();
+  if (NumberOfTimeSteps > 0)
   {
-    if(this->TimeSteps != nullptr)
-    {
-      delete []this->TimeSteps;
-    }
-    this->TimeSteps = new double[this->NumberOfTimeSteps];
-
-    int varid;
-    CALL_NETCDF(nc_inq_varid(ncid, "time_instant", &varid));
-    size_t start[] = {0};
-    size_t count[] = {this->NumberOfTimeSteps};
-    CALL_NETCDF(nc_get_vara_double(ncid, varid, start, count, this->TimeSteps));
+    std::vector<double> newTimeSteps = getNCVarDouble(ncid, "time_instant", {0}, {NumberOfTimeSteps});
+    TimeSteps.swap(newTimeSteps);
 
     // Tell the pipeline which steps are available and their range
     outInfo->Set(vtkStreamingDemandDrivenPipeline::TIME_STEPS(),
-		 this->TimeSteps, static_cast<int>(this->NumberOfTimeSteps));
-    double timeRange[2] = {this->TimeSteps[0],
-			   this->TimeSteps[this->NumberOfTimeSteps - 1]};
+		 this->TimeSteps.data(), static_cast<int>(TimeSteps.size()));
+    double timeRange[2] = {this->TimeSteps.front(),
+			   this->TimeSteps.back()};
     outInfo->Set(vtkStreamingDemandDrivenPipeline::TIME_RANGE(), timeRange, 2);
     vtkDebugMacro("timeRange=" << timeRange[0] << " " << timeRange[1] << endl);
   }
@@ -156,13 +140,20 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
     outInfo->Get(vtkDataObject::DATA_OBJECT()));
 
   // Default to first time step if no specific request has been made
-  double time = 0.0;
+  double requested_time = 0.0;
   if (outInfo->Has(vtkStreamingDemandDrivenPipeline::UPDATE_TIME_STEP()))
   {
-    time = outInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_TIME_STEP());
+    requested_time = outInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_TIME_STEP());
   }
 
-  vtkDebugMacro("Requested time=" << time << endl);
+  size_t timestep;
+  for (timestep = 0; timestep < this->TimeSteps.size(); timestep++)
+  {
+    if (this->TimeSteps[timestep] >= requested_time) break;
+  }
+
+  vtkDebugMacro("Requested time=" << requested_time << endl);
+  vtkDebugMacro("Requested timestep=" << timestep << endl);
 
   if(this->FileName == nullptr)
   {
@@ -171,21 +162,21 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   }
   vtkDebugMacro("FileName=" << FileName << endl);
 
-  int mode = NC_NOWRITE;
   int ncid;
-  CALL_NETCDF(nc_open(this->FileName, mode, &ncid));
+  CALL_NETCDF(nc_open(this->FileName, NC_NOWRITE, &ncid));
 
   // Read UGRID description from file and create unstructured grid
   if (!this->CreateVTKGrid(ncid, outputGrid))
   {
     vtkErrorMacro("Could not create VTK grid.");
+    return 0;
   }
 
   // Load requested field data for requested time step
-  // FIXME: add time step here
-  if (!this->LoadFields(ncid, outputGrid))
+  if (!this->LoadFields(ncid, outputGrid, timestep))
   {
     vtkErrorMacro("Could not load field data.");
+    return 0;
   }
 
   CALL_NETCDF(nc_close(ncid));
@@ -276,7 +267,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
   vtkDebugMacro("nnodes=" << nnodes << endl);
 
   // Get number of levels in full level face grid
-  size_t nlevels = getNCDim(ncid, "full_levels_faces");
+  size_t nlevels = getNCDim(ncid, "full_levels");
   this->NumberOfLevels = nlevels;
   vtkDebugMacro("nlevels=" << nlevels << endl);
 
@@ -284,6 +275,11 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
   size_t nfaces = getNCDim(ncid, "nMesh2d_full_levels_face");
   this->NumberOfFaces2D = nfaces;
   vtkDebugMacro("nfaces=" << nfaces << endl);
+
+  // Get number of edges in half level face grid
+  size_t nedges = getNCDim(ncid, "nMesh2d_half_levels_edge");
+  this->NumberOfEdges2D = nedges;
+  vtkDebugMacro("nedges=" << nedges << endl);
 
   // Get number of vertices per face in full levels face grid
   size_t nverts_per_face = getNCDim(ncid, "nMesh2d_full_levels_vertex");
@@ -294,7 +290,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
   std::vector<double> node_coords_y = getNCVarDouble(ncid, "Mesh2d_full_levels_node_y", {0}, {nnodes});
 
   // Get vertical level heights
-  std::vector<double> levels = getNCVarDouble(ncid, "full_levels_faces", {0}, {nlevels});
+  std::vector<double> levels = getNCVarDouble(ncid, "full_levels", {0}, {nlevels});
 
   // Get node connectivity of full level face grid
   std::vector<unsigned long long> face_nodes = getNCVarULongLong(ncid, "Mesh2d_full_levels_face_nodes", {0,0}, {nfaces,nverts_per_face});
@@ -352,7 +348,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
 }
 
 // Read field data from netCDF file and add to the VTK grid
-int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid)
+int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, size_t timestep)
 {
   vtkDebugMacro("Entering LoadFields..." << endl);
 
@@ -368,8 +364,13 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid)
 
   vtkDebugMacro("numVars=" << numVars << endl);
 
+  // Need to identify time dimension
   int time_counter_dimid;
   CALL_NETCDF(nc_inq_dimid(ncid, "time_counter", &time_counter_dimid));
+
+  // Get edge-face connectivity for W2 horizontal fields
+  // We have to assume here that the edges in the half-level edge and half-level face grids coincide
+  std::vector<unsigned long long> edge_faces = getNCVarULongLong(ncid, "Mesh2d_half_levels_edge_face_links", {0,0}, {this->NumberOfEdges2D,2});
 
   if (numVars > 0)
   {
@@ -380,9 +381,9 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid)
       CALL_NETCDF(nc_inq_varname(ncid, ivar, name));
 
       // Ignore UGRID mesh description and time axis
-      if ( (strstr(name, "Mesh2d_") == nullptr) &&
-	   (strstr(name, "half_levels_") == nullptr) &&
-	   (strstr(name, "full_levels_") == nullptr) &&
+      if ( (strstr(name, "Mesh2d") == nullptr) &&
+	   (strstr(name, "half_levels") == nullptr) &&
+	   (strstr(name, "full_levels") == nullptr) &&
 	   (strstr(name, "time_instant") == nullptr) )
       {
 
@@ -417,22 +418,18 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid)
         size_t total_size = 1;
 	for (size_t idim = 0; idim < ndims; idim++)
 	{
-	  size_t dimlen;
-	  CALL_NETCDF(nc_inq_dimlen(ncid, dimids[idim], &dimlen));
 	  if ( idim == time_dim )
 	  {
-	    // FIXME:
-	    // Work out correct time index, something along the lines of:
-	    // if (timeValues->GetValue(static_cast<vtkIdType>(start[0])) >= time) break;
-	    // Or maybe it is possible to get a time index out of VTK's Information class?
-	    start[idim] = 0;
+	    start[idim] = timestep;
 	    count[idim] = 1;
 	  }
 	  else
 	  {
+            size_t dimlen;
+            CALL_NETCDF(nc_inq_dimlen(ncid, dimids[idim], &dimlen));
             start[idim] = 0;
             count[idim] = dimlen;
-	    total_size *= dimlen;
+            total_size *= dimlen;
 	  }
 	}
         vtkDebugMacro("Computed total size of field total_size=" << total_size << endl);
@@ -441,30 +438,42 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid)
 
         CALL_NETCDF(nc_get_vara_double(ncid, ivar, start, count, read_buffer));
 
-	// Check if variable is defined on full levels or half levels
-	bool half_level_mesh;
+	mesh_types mesh_type;
+
+        // Find out which mesh type is used for this variable
 	size_t mesh_name_len;
 	CALL_NETCDF(nc_inq_attlen(ncid, ivar, "mesh", &mesh_name_len));
 	char mesh_name[mesh_name_len];
 	CALL_NETCDF(nc_get_att_text(ncid, ivar, "mesh", mesh_name));
+
 	if ( strcmp(mesh_name, "Mesh2d_half_levels") == 0 )
 	{
-          half_level_mesh = true;
-          vtkDebugMacro("Field is defined on half level mesh" << endl);
+          mesh_type = half_level_face;
+          vtkDebugMacro("Field is defined on half level face mesh" << endl);
           if (total_size != (this->NumberOfLevels-1)*this->NumberOfFaces2D)
+          {
+            vtkErrorMacro("Unexpected field size.");
+          }
+	}
+	else if ( strcmp(mesh_name, "Mesh2d_edge_half_levels") == 0 )
+	{
+          mesh_type = half_level_edge;
+          vtkDebugMacro("Field is defined on half level edge mesh" << endl);
+          if (total_size != (this->NumberOfLevels-1)*this->NumberOfEdges2D)
           {
             vtkErrorMacro("Unexpected field size.");
           }
 	}
 	else if ( strcmp(mesh_name, "Mesh2d_full_levels") == 0 )
 	{
-          half_level_mesh = false;
-          vtkDebugMacro("Field is defined on full level mesh" << endl);
+          mesh_type = full_level_face;
+          vtkDebugMacro("Field is defined on full level face mesh" << endl);
           if (total_size != this->NumberOfLevels*this->NumberOfFaces2D)
           {
             vtkErrorMacro("Unexpected field size.");
           }
 	}
+        // Support for nodal grid (or other grids) will be added as needed
 	else
 	{
 	  vtkErrorMacro("Unknown mesh.");
@@ -479,21 +488,41 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid)
         field->SetNumberOfTuples((this->NumberOfLevels-1)*this->NumberOfFaces2D);
         field->SetName(name);
 
-	// Average each cell over top and bottom face in case of full level mesh
-        if (half_level_mesh)
+        switch(mesh_type)
 	{
-          vtkDebugMacro("half level mesh: no interpolation needed" << endl);
-          for (vtkIdType i = 0; i < (this->NumberOfLevels-1)*this->NumberOfFaces2D; i++) {
+        case half_level_face :
+          vtkDebugMacro("half level face mesh: no interpolation needed" << endl);
+          for (vtkIdType i = 0; i < (this->NumberOfLevels-1)*this->NumberOfFaces2D; i++)
+          {
 	    field->SetComponent(i, 0, read_buffer[i]);
           }
-        }
-        else
-	{
-          vtkDebugMacro("full level mesh: averaging top and bottom faces" << endl);
-          for (vtkIdType i = 0; i < (this->NumberOfLevels-1)*this->NumberOfFaces2D; i++) {
+          break;
+        case full_level_face :
+          vtkDebugMacro("full level face mesh: averaging top and bottom faces" << endl);
+          for (vtkIdType i = 0; i < (this->NumberOfLevels-1)*this->NumberOfFaces2D; i++)
+          {
             double bottomval = read_buffer[i];
             double topval = read_buffer[i+this->NumberOfFaces2D];
 	    field->SetComponent(i, 0, 0.5*(bottomval+topval));
+          }
+          break;
+        case half_level_edge:
+          vtkDebugMacro("half level edge mesh: averaging four edges" << endl);
+          field->Fill(0.0);
+          for (vtkIdType edge = 0; edge < this->NumberOfEdges2D; edge++)
+	  {
+            // Each edge is shared by 2 faces
+            for (int side = 0; side < 2; side++)
+	    {
+              // Look up face ID and fill entire vertical column
+              unsigned long long face = edge_faces[edge*2+side];
+              for (int level = 0; level < (this->NumberOfLevels-1); level++)
+	      {
+                double fieldval = field->GetComponent(face+level*this->NumberOfFaces2D, 0);
+                fieldval += 0.25*read_buffer[edge+level*this->NumberOfEdges2D];
+                field->SetComponent(face+level*this->NumberOfFaces2D, 0, fieldval);
+              }
+            }
           }
         }
 

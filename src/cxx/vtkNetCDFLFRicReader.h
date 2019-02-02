@@ -21,7 +21,9 @@
 #define DEBUG 1
 
 class VTKIONETCDF_EXPORT vtkNetCDFLFRicReader : public vtkUnstructuredGridAlgorithm {
+
 public:
+
   vtkTypeMacro(vtkNetCDFLFRicReader,vtkUnstructuredGridAlgorithm);
   static vtkNetCDFLFRicReader *New();
   void PrintSelf(ostream& os, vtkIndent indent) override;
@@ -35,6 +37,10 @@ protected:
   vtkNetCDFLFRicReader();
   ~vtkNetCDFLFRicReader() override;
 
+  // Data is defined on 4 different grids
+  // nodal - full level face - half level face - half level edge
+  enum mesh_types {nodal, full_level_face, half_level_face, half_level_edge};
+
   // Return time steps from the input file
   int RequestInformation(vtkInformation*, vtkInformationVector**,
                          vtkInformationVector*) override;
@@ -47,7 +53,7 @@ protected:
   int CreateVTKGrid(const int ncid, vtkUnstructuredGrid *grid);
 
   // Read field data from netCDF file and add to the VTK grid
-  int LoadFields(const int ncid, vtkUnstructuredGrid *grid);
+  int LoadFields(const int ncid, vtkUnstructuredGrid *grid, size_t timestep);
 
   // Utility functions
   size_t getNCDim(const int ncid, const char * dimname);
@@ -62,8 +68,8 @@ private:
   vtkNetCDFLFRicReader(const vtkNetCDFLFRicReader&) = delete;
   void operator=(const vtkNetCDFLFRicReader&) = delete;
 
-  double * TimeSteps;
-  size_t NumberOfTimeSteps, NumberOfLevels, NumberOfFaces2D;
+  std::vector<double> TimeSteps;
+  size_t NumberOfLevels, NumberOfFaces2D, NumberOfEdges2D;
 
 };
 #endif

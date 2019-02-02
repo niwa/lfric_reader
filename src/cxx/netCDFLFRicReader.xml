@@ -20,6 +20,15 @@
         </Documentation>
       </StringVectorProperty>
 
+      <DoubleVectorProperty information_only="1"
+                            name="TimestepValues"
+                            repeatable="1">
+        <TimeStepsInformationHelper />
+        <Documentation>
+          Enable animations with time steps if available in the input file.
+        </Documentation>
+      </DoubleVectorProperty>
+
       <Hints>
         <ReaderFactory extensions="nc"
                       file_description="LFRic netCDF Reader" />
