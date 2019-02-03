@@ -29,6 +29,17 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty name="UseCartesianCoordinates"
+                         label="Use Cartesian coordinates"
+                         command="SetUseCartCoords"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          Convert longitude-latitude-radius coordinates to Cartesian coordinates.
+        </Documentation>
+      </IntVectorProperty>
+
       <Hints>
         <ReaderFactory extensions="nc"
                       file_description="LFRic netCDF Reader" />

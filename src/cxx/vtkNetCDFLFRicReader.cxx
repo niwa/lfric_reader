@@ -12,7 +12,9 @@
 #include <vtkCellData.h>
 
 #include <vtk_netcdf.h>
+// FIXME: use VTK math here?
 #include <math.h>
+#include <unordered_map>
 
 #define CALL_NETCDF(call) \
   { \
@@ -38,6 +40,7 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->SetNumberOfInputPorts(0);
   this->SetNumberOfOutputPorts(1);
   this->FileName = nullptr;
+  this->UseCartCoords = false;
   this->NumberOfLevels = 0;
   this->NumberOfFaces2D = 0;
   this->NumberOfEdges2D = 0;
@@ -248,6 +251,107 @@ std::vector<unsigned long long> vtkNetCDFLFRicReader::getNCVarULongLong(const in
   return vardata;
 }
 
+void vtkNetCDFLFRicReader::mirror_points(vtkSmartPointer<vtkUnstructuredGrid> grid) {
+
+  vtkDebugMacro("Entering mirror_points..." << endl);
+
+  // Compute xy grid dimensions
+  double gridBounds[6];
+  grid->GetBounds(gridBounds);
+  double gridDx = gridBounds[1] - gridBounds[0];
+  double gridDy = gridBounds[3] - gridBounds[2];
+
+  // Need to keep track of points that have already been duplicated,
+  // to avoid degenerate points
+  std::unordered_map<vtkIdType, vtkIdType> mirrorPointsX;
+  std::unordered_map<vtkIdType, vtkIdType> mirrorPointsY;
+  std::unordered_map<vtkIdType, vtkIdType> mirrorPointsXY;
+  std::unordered_map<vtkIdType, vtkIdType>::const_iterator mirrorPointsIt;
+
+  vtkPoints * gridPoints = grid->GetPoints();
+  vtkSmartPointer<vtkIdList> oldCellPoints = vtkSmartPointer<vtkIdList>::New();
+
+  // Search entire grid
+  for (vtkIdType cellId = 0; cellId < grid->GetNumberOfCells(); cellId++) {
+
+    // Compute xy cell dimensions
+    double cellBounds[6];
+    grid->GetCellBounds(cellId, cellBounds);
+    double cellDx = cellBounds[1] - cellBounds[0];
+    double cellDy = cellBounds[3] - cellBounds[2];
+
+    // Find cells that span across the grid
+    bool spanX = cellDx > 0.5*gridDx;
+    bool spanY = cellDy > 0.5*gridDy;
+
+    if (spanX or spanY) {
+
+      grid->GetCellPoints(cellId, oldCellPoints);
+
+      vtkIdType newCellPoints[8];
+
+      // Check each cell vertex and mirror if needed
+      for (vtkIdType pointIdIndex = 0; pointIdIndex < 8; pointIdIndex++) {
+
+	vtkIdType thisPointId = oldCellPoints->GetId(pointIdIndex);
+	double thisPointCoords[3];
+	grid->GetPoint(thisPointId, thisPointCoords);
+
+	// Mirror corner point
+	if (spanX and spanY and thisPointCoords[0] < 0 and thisPointCoords[1] < 0) {
+	  // Keep track of mirrored points to avoid degeneracy; insert a new point if
+	  // no mirror point has been created yet
+	  mirrorPointsIt = mirrorPointsXY.find(thisPointId);
+	  if (mirrorPointsIt == mirrorPointsXY.end()) {
+	    vtkIdType newPointId = gridPoints->InsertNextPoint(-thisPointCoords[0], -thisPointCoords[1], thisPointCoords[2]);
+            mirrorPointsXY.insert({thisPointId, newPointId});
+            newCellPoints[pointIdIndex] = newPointId;
+	  }
+          else {
+            newCellPoints[pointIdIndex] = mirrorPointsIt->second;
+          }
+	}
+	// Mirror point on left domain boundary
+	else if (spanX && thisPointCoords[0] < 0) {
+          mirrorPointsIt = mirrorPointsX.find(thisPointId);
+	  if (mirrorPointsIt == mirrorPointsX.end()) {
+	    vtkIdType newPointId = gridPoints->InsertNextPoint(-thisPointCoords[0], thisPointCoords[1], thisPointCoords[2]);
+            mirrorPointsX.insert({thisPointId, newPointId});
+            newCellPoints[pointIdIndex] = newPointId;
+	  }
+          else {
+            newCellPoints[pointIdIndex] = mirrorPointsIt->second;
+          }
+	}
+	// Mirror points on bottom domain boundary
+	else if (spanY && thisPointCoords[1] < 0) {
+          mirrorPointsIt = mirrorPointsY.find(thisPointId);
+	  if (mirrorPointsIt == mirrorPointsY.end()) {
+	    vtkIdType newPointId = gridPoints->InsertNextPoint(thisPointCoords[0], -thisPointCoords[1], thisPointCoords[2]);
+            mirrorPointsY.insert({thisPointId, newPointId});
+            newCellPoints[pointIdIndex] = newPointId;
+	  }
+          else {
+            newCellPoints[pointIdIndex] = mirrorPointsIt->second;
+          }
+	}
+	// No mirror point needed
+	else {
+	  newCellPoints[pointIdIndex] = thisPointId;
+	}
+
+      }
+      grid->ReplaceCell(cellId, 8, newCellPoints);
+    }
+  }
+
+  vtkDebugMacro("mirrorPointsX: " << mirrorPointsX.size() << endl);
+  vtkDebugMacro("mirrorPointsY: " << mirrorPointsY.size() << endl);
+  vtkDebugMacro("mirrorPointsXY: " << mirrorPointsXY.size() << endl);
+
+  vtkDebugMacro("mirror_points" << endl);
+}
+
 // Read UGRID description from netCDF file and build VTK grid
 // The VTK grid replicates the "full level face grid" in the
 // LFRic output file, data that is stored on the other grids
@@ -301,21 +405,34 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
   vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
   for (size_t ilevel = 0; ilevel < nlevels; ilevel++)
   {
-    for (size_t inode = 0; inode < nnodes; inode++)
+    if (this->UseCartCoords)
     {
-      // Avoid zero level height
-      const double level_shift = 0.5;
+      for (size_t inode = 0; inode < nnodes; inode++)
+      {
+        // Avoid zero level height
+        const double level_shift = 0.5;
 
-      const double coords[3] = {node_coords_x[inode],
-                                node_coords_y[inode],
-                                levels[ilevel] + level_shift};
+        const double coords[3] = {node_coords_x[inode],
+                                  node_coords_y[inode],
+                                  levels[ilevel] + level_shift};
 
-      // Convert from lon-lat-rad to xyz coordinates
-      const double xyz[3] = {coords[2]*cosf(coords[0]/180.0*M_PI)*cosf(coords[1]/180.0*M_PI),
-                             coords[2]*sinf(coords[0]/180.0*M_PI)*cosf(coords[1]/180.0*M_PI),
-                             coords[2]*sinf(coords[1]/180.0*M_PI)};
+        // Convert from lon-lat-rad to Cartesian coordinates
+        const double xyz[3] = {coords[2]*cosf(coords[0]/180.0*M_PI)*cosf(coords[1]/180.0*M_PI),
+                               coords[2]*sinf(coords[0]/180.0*M_PI)*cosf(coords[1]/180.0*M_PI),
+                               coords[2]*sinf(coords[1]/180.0*M_PI)};
 
-      points->InsertNextPoint(xyz);
+        points->InsertNextPoint(xyz);
+      }
+    }
+    else
+    {
+      for (size_t inode = 0; inode < nnodes; inode++)
+      {
+        const double coords[3] = {node_coords_x[inode]-180.0,
+                                  node_coords_y[inode],
+                                  levels[ilevel]};
+        points->InsertNextPoint(coords);
+      }
     }
   }
   grid->SetPoints(points);
@@ -339,6 +456,11 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
       }
       grid->InsertNextCell(VTK_HEXAHEDRON, static_cast<vtkIdType>(2*nverts_per_face), cell_verts);
     }
+  }
+
+  if (!this->UseCartCoords)
+  {
+    mirror_points(grid);
   }
 
   vtkDebugMacro("Finished CreateVTKGrid" << endl);
@@ -371,6 +493,8 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
   // Get edge-face connectivity for W2 horizontal fields
   // We have to assume here that the edges in the half-level edge and half-level face grids coincide
   std::vector<unsigned long long> edge_faces = getNCVarULongLong(ncid, "Mesh2d_half_levels_edge_face_links", {0,0}, {this->NumberOfEdges2D,2});
+
+  SetProgressText("Loading Field Data");
 
   if (numVars > 0)
   {
@@ -526,9 +650,11 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
           }
         }
 
-	grid->GetCellData()->AddArray(field);
+        grid->GetCellData()->AddArray(field);
 
-	delete []read_buffer;
+        delete []read_buffer;
+
+        this->UpdateProgress(static_cast<float>(ivar)/static_cast<float>(numVars));
       }
     }
   }
@@ -537,4 +663,17 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
 
   return 1;
 
+}
+
+void vtkNetCDFLFRicReader::SetUseCartCoords(bool SetCartCoords)
+{
+  if (SetCartCoords)
+  {
+    this->UseCartCoords = true;
+  }
+  else
+  {
+    this->UseCartCoords = false;
+  }
+  this->Modified();
 }

@@ -13,6 +13,7 @@
 #include <vtkIONetCDFModule.h> // For export macro
 #include <vtkUnstructuredGridAlgorithm.h>
 #include <vtkUnstructuredGrid.h>
+#include <vtkSmartPointer.h>
 #include <vtk_netcdf.h>
 
 #include <vector>
@@ -31,6 +32,9 @@ public:
   // Specify name of input data file
   vtkSetStringMacro(FileName); // Defines SetFileName()
   vtkGetStringMacro(FileName); // Defines GetFileName()
+
+  void SetUseCartCoords(bool SetCartCoords);
+  vtkGetMacro(UseCartCoords, bool);
 
 protected:
 
@@ -60,8 +64,11 @@ protected:
 
   std::vector<double> getNCVarDouble(const int ncid, const char * varname, const std::initializer_list<size_t> start, const std::initializer_list<size_t> count);
   std::vector<unsigned long long> getNCVarULongLong(const int ncid, const char * varname, const std::initializer_list<size_t> start, const std::initializer_list<size_t> count);
+  void mirror_points(vtkSmartPointer<vtkUnstructuredGrid> grid);
 
   char *FileName;
+
+  bool UseCartCoords;
 
 private:
 
