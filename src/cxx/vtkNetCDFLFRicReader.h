@@ -22,22 +22,24 @@
 
 #define DEBUG 1
 
-class VTKIONETCDF_EXPORT vtkNetCDFLFRicReader : public vtkUnstructuredGridAlgorithm {
+class VTKIONETCDF_EXPORT vtkNetCDFLFRicReader : public vtkUnstructuredGridAlgorithm
+{
 
 public:
 
-  vtkTypeMacro(vtkNetCDFLFRicReader,vtkUnstructuredGridAlgorithm);
+  vtkTypeMacro(vtkNetCDFLFRicReader,vtkUnstructuredGridAlgorithm)
   static vtkNetCDFLFRicReader *New();
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   // Specify name of input data file
-  vtkSetStringMacro(FileName); // Defines SetFileName()
-  vtkGetStringMacro(FileName); // Defines GetFileName()
+  vtkSetStringMacro(FileName);
+  vtkGetStringMacro(FileName);
 
-  void SetUseCartCoords(int SetCartCoords);
-  // May need to do this explicitly due to int/bool conversion
-  vtkGetMacro(UseCartCoords, bool);
+  // ParaView interface for switching coordinates
+  void SetUseCartCoords(const int status);
+  vtkGetMacro(UseCartCoords, int);
 
+  // ParaView interface for selecting data fields
   int GetNumberOfCellArrays();
   const char* GetCellArrayName(const int index);
   int GetCellArrayStatus(const char* name);
@@ -48,7 +50,7 @@ protected:
   vtkNetCDFLFRicReader();
   ~vtkNetCDFLFRicReader() override;
 
-  // Data can be defined on these 4 different grids
+  // Data can be defined on these 4 different mesh types
   enum mesh_types {nodal, full_level_face, half_level_face, half_level_edge};
 
   // Return time steps from the input file and collect field (array) names
@@ -62,11 +64,12 @@ protected:
   // Build VTK grid from UGRID description
   int CreateVTKGrid(const int ncid, vtkUnstructuredGrid *grid);
 
-  // Read field data from netCDF file and add to the VTK grid
-  int LoadFields(const int ncid, vtkUnstructuredGrid *grid, size_t timestep);
+  // Read selected field data from netCDF file and add to the VTK grid
+  int LoadFields(const int ncid, vtkUnstructuredGrid *grid, const size_t timestep);
 
-  // netCDF utility functions
+  // NetCDF utility functions
   size_t getNCDim(const int ncid, const char * dimname);
+  std::vector<std::string> getNCVarNames(const int ncid);
   std::vector<double> getNCVarDouble(const int ncid, const char * varname,
                                      const std::initializer_list<size_t> start,
                                      const std::initializer_list<size_t> count);
@@ -83,7 +86,7 @@ private:
   void operator=(const vtkNetCDFLFRicReader&) = delete;
 
   char *FileName;
-  bool UseCartCoords;
+  int UseCartCoords;
   std::map<std::string,bool> Fields;
   std::vector<double> TimeSteps;
   size_t NumberOfLevels, NumberOfFaces2D, NumberOfEdges2D;
