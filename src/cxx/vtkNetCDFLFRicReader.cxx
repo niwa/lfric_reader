@@ -129,7 +129,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
   }
 
   // Get variable names and populate "Fields" map, ignoring UGRID mesh definitions
-  for (std::string name : getNCVarNames(ncid))
+  for (std::string const &name : getNCVarNames(ncid))
   {
     vtkDebugMacro("Considering variable name=" << name << endl);
 
@@ -139,7 +139,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
         name.compare(0, 12, "time_instant") != 0)
     {
       // If field is not in list, insert and default to "don't load"
-      std::map<std::string,bool>::iterator it = this->Fields.find(name);
+      std::map<std::string,bool>::const_iterator it = this->Fields.find(name);
       if (it == this->Fields.end())
       {
         this->Fields.insert(it, std::pair<std::string,bool>(name,false));
@@ -263,7 +263,7 @@ std::vector<double> vtkNetCDFLFRicReader::getNCVarDouble(const int ncid,
 
   // Compute total number of elements to read
   size_t size = 1;
-  for (size_t n : count)
+  for (size_t const n : count)
   {
     size *= n;
   }
@@ -292,7 +292,7 @@ std::vector<unsigned long long> vtkNetCDFLFRicReader::getNCVarULongLong(const in
   CALL_NETCDF(nc_inq_varid(ncid, varname, &varId));
 
   size_t size = 1;
-  for (size_t n : count)
+  for (size_t const n : count)
   {
     size *= n;
   }
@@ -571,49 +571,37 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
 
   SetProgressText("Loading Field Data");
 
-  for (std::map<std::string,bool>::iterator it = this->Fields.begin();
-       it != this->Fields.end(); it++)
+  for (std::pair<std::string,bool> const &field : this->Fields)
   {
     // Load variable?
-    if (it->second)
+    if (field.second)
     {
-      std::string name = it->first;
+      std::string name = field.first;
 
       vtkDebugMacro("Reading variable " << name << endl);
 
-      // Get variable ID
+      // Get variable dimensions
       int ivar;
       CALL_NETCDF(nc_inq_varid(ncid, name.c_str(), &ivar));
-
-      // Gather variable info
       int ndims;
-      int dimids[NC_MAX_VAR_DIMS];
-      CALL_NETCDF(nc_inq_var(ncid, ivar, NULL, NULL, &ndims, dimids, NULL));
-
-      // Check if field is time-dependent and store the index of time dimension
-      size_t time_dim = -1;
-      for (size_t idim = 0; idim < static_cast<size_t>(ndims); idim++ )
-      {
-        if ( dimids[idim] == time_counter_dimid )
-        {
-          time_dim = idim;
-          vtkDebugMacro("Found time dimension in time_dim=" << time_dim << endl);
-          break;
-        }
-      }
+      CALL_NETCDF(nc_inq_varndims(ncid, ivar, &ndims));
+      std::vector<int> dimids;
+      dimids.resize(ndims);
+      CALL_NETCDF(nc_inq_vardimid(ncid, ivar, dimids.data()));
 
       // Work out field dimensions to create a read buffer of sufficient size
-      std::vector<size_t> start;
+      std::vector<size_t> start, count;
       start.resize(ndims);
-      std::vector<size_t> count;
       count.resize(ndims);
       size_t total_size = 1;
       for (size_t idim = 0; idim < static_cast<size_t>(ndims); idim++)
       {
-        if ( idim == time_dim )
+        // Load only requested time step if time dimension is present
+        if (dimids[idim] == time_counter_dimid)
         {
           start[idim] = timestep;
           count[idim] = 1;
+          vtkDebugMacro("Found time dimension at idim=" << idim << endl);
         }
         else
         {
@@ -757,9 +745,9 @@ const char* vtkNetCDFLFRicReader::GetCellArrayName(const int index)
   // ParaView also wants us to provide array names by index. Input files
   // shouldn't contain too many arrays, so we'll simply count map keys.
   int counter = 0;
-  for (std::map<std::string,bool>::iterator it = this->Fields.begin();
-                                            it != this->Fields.end();
-                                            it++, counter++)
+  std::map<std::string,bool>::const_iterator it;
+  for (it = this->Fields.begin(); it != this->Fields.end();
+       it++, counter++)
   {
     if (counter == index)
     {
@@ -774,7 +762,7 @@ const char* vtkNetCDFLFRicReader::GetCellArrayName(const int index)
 int vtkNetCDFLFRicReader::GetCellArrayStatus(const char* name)
 {
   int status;
-  std::map<std::string,bool>::iterator it = this->Fields.find(name);
+  std::map<std::string,bool>::const_iterator it = this->Fields.find(name);
   if (it != this->Fields.end())
   {
     status = static_cast<int>(it->second);
