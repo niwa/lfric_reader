@@ -565,7 +565,7 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
   // Get edge-face connectivity for handling W2 horizontal fields
   // We have to assume here that the edges in the half-level edge and
   // half-level face grids coincide
-  const std::vector<unsigned long long> edge_faces = getNCVarULongLong(ncid,
+  const std::vector<unsigned long long> hl_edge_faces = getNCVarULongLong(ncid,
                                         "Mesh2d_half_levels_edge_face_links",
                                         {0,0}, {this->NumberOfEdges2D,2});
 
@@ -690,19 +690,21 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
           }
           break;
         case half_level_edge:
+          vtkWarningMacro("WARNING: edge-centered fields cannot be handled correctly at the moment" << endl);
           vtkDebugMacro("half level edge mesh: averaging four edges" << endl);
           field->Fill(0.0);
           for (size_t edge = 0; edge < this->NumberOfEdges2D; edge++)
 	  {
             // Each edge is shared by 2 faces
             for (size_t side = 0; side < 2; side++)
-	    {
+            {
               // Look up face ID, then evaluate entire vertical column
-              const size_t face = static_cast<size_t>(edge_faces[edge*2+side]);
+              const size_t face = static_cast<size_t>(hl_edge_faces[edge*2+side]);
               for (size_t level = 0; level < (this->NumberOfLevels-1); level++)
 	      {
                 const vtkIdType cellId = static_cast<vtkIdType>(face+level*this->NumberOfFaces2D);
                 double fieldval = field->GetComponent(cellId, 0);
+                // Pick up data in edge grid
                 fieldval += 0.25*read_buffer[edge+level*this->NumberOfEdges2D];
                 field->SetComponent(cellId, 0, fieldval);
               }
