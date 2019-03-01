@@ -31,7 +31,7 @@ ParaView should now allow you to choose the LFRic netCDF file reader when you op
 
 ## Debugging the reader
 
-The reader will send error messages to the error console in the ParaView GUI, and to the command line if available. You can get additional debugging output by setting the `DEBUG` macro at build time.
+The reader will send error messages to the error console in the ParaView GUI, and to the command line if available. You can also rebuild the reader with `-DCMAKE_BUILD_TYPE=Debug` (see above for instructions) to enable debugging output.
 
 ## Features and limitations
 
