@@ -40,6 +40,28 @@
         </Documentation>
       </IntVectorProperty>
 
+      <DoubleVectorProperty name="VerticalScale"
+                            label="Vertical Scale"
+                            command="SetVerticalScale"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            panel_visibility="advanced">
+        <Documentation>
+          This scale factor will be applied to the vertical coordinate "rad", r = scale*(rad+bias).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="VerticalBias"
+                            label="Vertical Bias"
+                            command="SetVerticalBias"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            panel_visibility="advanced">
+        <Documentation>
+          This bias will be added to the vertical coordinate "rad", r = scale*(rad+bias).
+        </Documentation>
+      </DoubleVectorProperty>
+
       <StringVectorProperty name="CellArrayInfo"
                             information_only="1">
         <ArraySelectionInformationHelper attribute_name="Cell"/>

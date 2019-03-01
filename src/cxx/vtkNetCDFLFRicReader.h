@@ -39,6 +39,10 @@ public:
   void SetUseCartCoords(const int status);
   vtkGetMacro(UseCartCoords, int);
 
+  // ParaView interface for controlling radius coordinate
+  void SetVerticalScale(const double value);
+  void SetVerticalBias(const double value);
+
   // ParaView interface for selecting data fields
   int GetNumberOfCellArrays();
   const char* GetCellArrayName(const int index);
@@ -87,6 +91,7 @@ private:
 
   char *FileName;
   int UseCartCoords;
+  double VerticalScale, VerticalBias;
   std::map<std::string,bool> Fields;
   std::vector<double> TimeSteps;
   size_t NumberOfLevels, NumberOfFaces2D, NumberOfEdges2D;

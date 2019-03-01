@@ -37,6 +37,8 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->SetNumberOfOutputPorts(1);
   this->FileName = nullptr;
   this->UseCartCoords = 0;
+  this->VerticalScale = 1.0;
+  this->VerticalBias = 1.0;
   this->Fields.clear();
   this->TimeSteps.clear();
   this->NumberOfLevels = 0;
@@ -483,12 +485,9 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
     {
       for (size_t inode = 0; inode < nnodes; inode++)
       {
-        // Avoid zero level height
-        const double level_shift = 0.5;
-
         const double coords[3] = {node_coords_x[inode],
                                   node_coords_y[inode],
-                                  levels[ilevel] + level_shift};
+                                  this->VerticalScale*(levels[ilevel] + this->VerticalBias)};
 
         // Convert from lon-lat-rad to Cartesian coordinates
         const double xyz[3] = {coords[2]*cos(coords[0]*deg2rad)*cos(coords[1]*deg2rad),
@@ -508,7 +507,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(const int ncid, vtkUnstructuredGrid *gri
         // Shift by 180 degrees to enable detection of grid periodicity
         const double coords[3] = {node_coords_x[inode]-180.0,
                                   node_coords_y[inode],
-                                  levels[ilevel]};
+                                  this->VerticalScale*(levels[ilevel] + this->VerticalBias)};
         points->InsertNextPoint(coords);
       }
     }
@@ -733,6 +732,18 @@ void vtkNetCDFLFRicReader::SetUseCartCoords(const int status)
 {
   this->UseCartCoords = status;
   // Notify pipeline
+  this->Modified();
+}
+
+void vtkNetCDFLFRicReader::SetVerticalScale(const double value)
+{
+  this->VerticalScale = value;
+  this->Modified();
+}
+
+void vtkNetCDFLFRicReader::SetVerticalBias(const double value)
+{
+  this->VerticalBias = value;
   this->Modified();
 }
 
