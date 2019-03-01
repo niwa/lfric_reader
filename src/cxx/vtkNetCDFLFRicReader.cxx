@@ -699,10 +699,10 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
       vtkDebugMacro("Setting vtkDoubleArray for this field..." << endl);
 
       // Create vtkDoubleArray for field data, vector components are stored separately
-      vtkSmartPointer<vtkDoubleArray> field = vtkSmartPointer<vtkDoubleArray>::New();
-      field->SetNumberOfComponents(1);
-      field->SetNumberOfTuples((this->NumberOfLevels-1)*this->NumberOfFaces2D);
-      field->SetName(name.c_str());
+      vtkSmartPointer<vtkDoubleArray> dataField = vtkSmartPointer<vtkDoubleArray>::New();
+      dataField->SetNumberOfComponents(1);
+      dataField->SetNumberOfTuples((this->NumberOfLevels-1)*this->NumberOfFaces2D);
+      dataField->SetName(name.c_str());
 
       switch(mesh_type)
       {
@@ -710,7 +710,7 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
           vtkDebugMacro("half level face mesh: no interpolation needed" << endl);
           for (size_t i = 0; i < (this->NumberOfLevels-1)*this->NumberOfFaces2D; i++)
           {
-	    field->SetComponent(static_cast<vtkIdType>(i), 0, read_buffer[i]);
+	    dataField->SetComponent(static_cast<vtkIdType>(i), 0, read_buffer[i]);
           }
           break;
         case full_level_face :
@@ -719,13 +719,13 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
           {
             const double bottomval = read_buffer[i];
             const double topval = read_buffer[i+this->NumberOfFaces2D];
-            field->SetComponent(static_cast<vtkIdType>(i), 0, 0.5*(bottomval+topval));
+           dataField->SetComponent(static_cast<vtkIdType>(i), 0, 0.5*(bottomval+topval));
           }
           break;
         case half_level_edge:
           vtkWarningMacro("WARNING: edge-centered fields cannot be handled correctly at the moment" << endl);
           vtkDebugMacro("half level edge mesh: averaging four edges" << endl);
-          field->Fill(0.0);
+          dataField->Fill(0.0);
           for (size_t edge = 0; edge < this->NumberOfEdges2D; edge++)
 	  {
             // Each edge is shared by 2 faces
@@ -736,20 +736,20 @@ int vtkNetCDFLFRicReader::LoadFields(const int ncid, vtkUnstructuredGrid *grid, 
               for (size_t level = 0; level < (this->NumberOfLevels-1); level++)
 	      {
                 const vtkIdType cellId = static_cast<vtkIdType>(face+level*this->NumberOfFaces2D);
-                double fieldval = field->GetComponent(cellId, 0);
+                double fieldval = dataField->GetComponent(cellId, 0);
                 // Pick up data in edge grid
                 fieldval += 0.25*read_buffer[edge+level*this->NumberOfEdges2D];
-                field->SetComponent(cellId, 0, fieldval);
+                dataField->SetComponent(cellId, 0, fieldval);
               }
             }
           }
           break;
         case nodal:
           vtkErrorMacro("nodal mesh: not currently supported" << endl);
-          field->Fill(0.0);
+          dataField->Fill(0.0);
       }
 
-      grid->GetCellData()->AddArray(field);
+      grid->GetCellData()->AddArray(dataField);
 
       this->UpdateProgress(static_cast<float>(ivar)/
                            static_cast<float>(this->Fields.size()));
