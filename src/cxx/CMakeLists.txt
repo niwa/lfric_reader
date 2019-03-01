@@ -7,6 +7,10 @@ set (CMAKE_CXX_STANDARD 11)
 FIND_PACKAGE(ParaView REQUIRED)
 INCLUDE(${PARAVIEW_USE_FILE})
 
+# Turn on DEBUG macro if CMAKE_BUILD_TYPE=Debug has been set
+# This will enable debug output at runtime
+add_compile_options("$<$<CONFIG:DEBUG>:-DDEBUG>")
+
 # Tell CMake to build a shared library plugin for ParaView
 # Readers are only needed on the server side
 ADD_PARAVIEW_PLUGIN(

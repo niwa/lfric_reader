@@ -26,10 +26,11 @@ vtkStandardNewMacro(vtkNetCDFLFRicReader)
 //----------------------------------------------------------------------------
 vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
 {
-  if (DEBUG)
-  {
-    this->DebugOn();
-  }
+
+  // Build with -DCMAKE_BUILD_TYPE=Debug to activate this
+#ifdef DEBUG
+  this->DebugOn();
+#endif
 
   vtkDebugMacro("Entering vtkNetCDFLFRicReader constructor..." << endl);
 
@@ -76,6 +77,39 @@ void vtkNetCDFLFRicReader::PrintSelf(ostream& os, vtkIndent indent)
 
   os << indent << "NumberOfCellArrays: "
      << this->GetNumberOfCellArrays() << endl;
+}
+
+//----------------------------------------------------------------------------
+int vtkNetCDFLFRicReader::CanReadFile(const char* fileName)
+{
+  vtkDebugMacro("Entering CanReadFile..." << endl);
+  vtkDebugMacro("fileName=" << fileName << endl);
+
+  int ncid;
+  CALL_NETCDF(nc_open(fileName, NC_NOWRITE, &ncid));
+
+  bool valid = false;
+
+  // At least one of the grids should be defined
+  for (std::string const &name : getNCVarNames(ncid))
+  {
+    valid |= name.compare("Mesh2d_edge_half_levels") == 0;
+    valid |= name.compare("Mesh2d_half_levels") == 0;
+    valid |= name.compare("Mesh2d_full_levels") == 0;
+  }
+
+  CALL_NETCDF(nc_close(ncid));
+
+  if (valid)
+  {
+    vtkDebugMacro("Finished CanReadFile (file is valid)" << endl);
+    return 1;
+  }
+  else
+  {
+    vtkDebugMacro("Finished CanReadFile (file is NOT valid)" << endl);
+    return 0;
+  }
 }
 
 //----------------------------------------------------------------------------

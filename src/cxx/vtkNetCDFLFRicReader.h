@@ -20,8 +20,6 @@
 #include <map>
 #include <string>
 
-#define DEBUG 1
-
 class VTKIONETCDF_EXPORT vtkNetCDFLFRicReader : public vtkUnstructuredGridAlgorithm
 {
 
@@ -34,6 +32,9 @@ public:
   // Specify name of input data file
   vtkSetStringMacro(FileName);
   vtkGetStringMacro(FileName);
+
+  // Check file validity
+  virtual int CanReadFile(const char* fileName);
 
   // ParaView interface for switching coordinates
   void SetUseCartCoords(const int status);
