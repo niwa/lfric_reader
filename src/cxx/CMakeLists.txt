@@ -18,3 +18,9 @@ ADD_PARAVIEW_PLUGIN(
     SERVER_MANAGER_XML netCDFLFRicReader.xml
     SERVER_MANAGER_SOURCES vtkNetCDFLFRicReader.cxx 
     REQUIRED_ON_SERVER)
+
+option(BUILD_TESTING "Build Testing" OFF)
+if(BUILD_TESTING)
+  include(CTest)
+  add_subdirectory(test)
+endif()

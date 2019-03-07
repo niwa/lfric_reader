@@ -83,6 +83,12 @@ void vtkNetCDFLFRicReader::PrintSelf(ostream& os, vtkIndent indent)
 int vtkNetCDFLFRicReader::CanReadFile(const char* fileName)
 {
   vtkDebugMacro("Entering CanReadFile..." << endl);
+
+  if(fileName == nullptr)
+  {
+    vtkErrorMacro("CanReadFile: FileName not set.");
+    return 0;
+  }
   vtkDebugMacro("fileName=" << fileName << endl);
 
   int ncid;

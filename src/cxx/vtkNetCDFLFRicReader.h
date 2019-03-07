@@ -42,7 +42,9 @@ public:
 
   // ParaView interface for controlling radius coordinate
   void SetVerticalScale(const double value);
+  vtkGetMacro(VerticalScale, double);
   void SetVerticalBias(const double value);
+  vtkGetMacro(VerticalBias, double);
 
   // ParaView interface for selecting data fields
   int GetNumberOfCellArrays();
