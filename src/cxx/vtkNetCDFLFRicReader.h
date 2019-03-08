@@ -10,6 +10,8 @@
 #ifndef vtkNetCDFLFRicReader_h
 #define vtkNetCDFLFRicReader_h
 
+#include "netCDFLFRicFile.h"
+
 #include <vtkIONetCDFModule.h> // For export macro
 #include <vtkUnstructuredGridAlgorithm.h>
 #include <vtkUnstructuredGrid.h>
@@ -69,20 +71,10 @@ protected:
                   vtkInformationVector *) override;
 
   // Build VTK grid from UGRID description
-  int CreateVTKGrid(const int ncid, vtkUnstructuredGrid *grid);
+  int CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid);
 
   // Read selected field data from netCDF file and add to the VTK grid
-  int LoadFields(const int ncid, vtkUnstructuredGrid *grid, const size_t timestep);
-
-  // NetCDF utility functions
-  size_t getNCDim(const int ncid, const char * dimname);
-  std::vector<std::string> getNCVarNames(const int ncid);
-  std::vector<double> getNCVarDouble(const int ncid, const char * varname,
-                                     const std::initializer_list<size_t> start,
-                                     const std::initializer_list<size_t> count);
-  std::vector<unsigned long long> getNCVarULongLong(const int ncid, const char * varname,
-                                                    const std::initializer_list<size_t> start,
-                                                    const std::initializer_list<size_t> count);
+  int LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid, const size_t timestep);
 
   // Transforms periodic grid into non-periodic grid by replicating vertices (points)
   void mirror_points(vtkSmartPointer<vtkUnstructuredGrid> grid);
@@ -92,7 +84,7 @@ private:
   vtkNetCDFLFRicReader(const vtkNetCDFLFRicReader&) = delete;
   void operator=(const vtkNetCDFLFRicReader&) = delete;
 
-  char *FileName;
+  char* FileName;
   int UseCartCoords;
   double VerticalScale, VerticalBias;
   std::map<std::string,bool> Fields;

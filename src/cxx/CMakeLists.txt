@@ -16,7 +16,8 @@ add_compile_options("$<$<CONFIG:DEBUG>:-DDEBUG>")
 ADD_PARAVIEW_PLUGIN(
     netCDFLFRicReader "1.0"
     SERVER_MANAGER_XML netCDFLFRicReader.xml
-    SERVER_MANAGER_SOURCES vtkNetCDFLFRicReader.cxx 
+    SERVER_MANAGER_SOURCES vtkNetCDFLFRicReader.cxx
+    SOURCES netCDFLFRicFile.cxx
     REQUIRED_ON_SERVER)
 
 option(BUILD_TESTING "Build Testing" OFF)
