@@ -128,7 +128,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
 
   netCDFLFRicFile inputFile(this->FileName);
 
-  // time_counter can contain 0
+  // "time_counter" dimension can be zero (single timestep)
   size_t NumberOfTimeSteps = inputFile.GetDimLen("time_counter");
   vtkDebugMacro("Number of time steps in file=" << NumberOfTimeSteps << endl);
 
@@ -157,20 +157,20 @@ int vtkNetCDFLFRicReader::RequestInformation(
   }
 
   // Get variable names and populate "Fields" map, ignoring UGRID mesh definitions
-  for (std::string const &name : inputFile.GetVarNames())
+  for (std::string const &varName : inputFile.GetVarNames())
   {
-    vtkDebugMacro("Considering variable name=" << name << endl);
+    vtkDebugMacro("Considering variable name=" << varName << endl);
 
-    if (name.compare(0, 6, "Mesh2d") != 0 &&
-        name.compare(0, 11, "half_levels") != 0 &&
-        name.compare(0, 11, "full_levels") != 0 &&
-        name.compare(0, 12, "time_instant") != 0)
+    if (varName.compare(0, 6, "Mesh2d") != 0 &&
+        varName.compare(0, 11, "half_levels") != 0 &&
+        varName.compare(0, 11, "full_levels") != 0 &&
+        varName.compare(0, 12, "time_instant") != 0)
     {
       // If field is not in list, insert and default to "don't load"
-      std::map<std::string,bool>::const_iterator it = this->Fields.find(name);
+      std::map<std::string,bool>::const_iterator it = this->Fields.find(varName);
       if (it == this->Fields.end())
       {
-        this->Fields.insert(it, std::pair<std::string,bool>(name,false));
+        this->Fields.insert(it, std::pair<std::string,bool>(varName,false));
       }
     }
   }
@@ -466,6 +466,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
     }
   }
 
+  // Need to replicate (mirror) points in periodic grid
   if (!this->UseCartCoords)
   {
     mirror_points(grid);
@@ -477,7 +478,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 }
 
 // Read field data from netCDF file and add to the VTK grid
-int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid, const size_t timestep)
+int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid* grid, const size_t timestep)
 {
   vtkDebugMacro("Entering LoadFields..." << endl);
 
