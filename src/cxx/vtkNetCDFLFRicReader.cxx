@@ -77,7 +77,7 @@ int vtkNetCDFLFRicReader::CanReadFile(const char* fileName)
 
   if(fileName == nullptr)
   {
-    vtkErrorMacro("CanReadFile: FileName not set.");
+    vtkErrorMacro("CanReadFile: FileName not set." << endl);
     return 0;
   }
   vtkDebugMacro("fileName=" << fileName << endl);
@@ -118,25 +118,68 @@ int vtkNetCDFLFRicReader::RequestInformation(
 
   if(this->FileName == nullptr)
   {
-    vtkErrorMacro("FileName not set.");
+    vtkErrorMacro("FileName not set." << endl);
     return 0;
   }
   vtkDebugMacro("FileName=" << this->FileName << endl);
 
-  // VTK object for handing over time step information
-  vtkInformation *outInfo = outputVector->GetInformationObject(0);
-
+  // Open input file
   netCDFLFRicFile inputFile(this->FileName);
 
-  // "time_counter" dimension can be zero (single timestep)
+  // Get variable names and populate "Fields" map, ignoring UGRID mesh definitions
+  // Also try and find variable with time step times
+  std::string timeVarName;
+  timeVarName.clear();
+  for (std::string const &varName : inputFile.GetVarNames())
+  {
+    vtkDebugMacro("Considering variable name=" << varName << endl);
+
+    // Is this simulation data?
+    if (varName.compare(0, 6, "Mesh2d") != 0 &&
+        varName.compare(0, 11, "half_levels") != 0 &&
+        varName.compare(0, 11, "full_levels") != 0 &&
+        varName.compare(0, 5, "time_") != 0)
+    {
+      // If field is not in list, insert and default to "don't load"
+      std::map<std::string,bool>::const_iterator it = this->Fields.find(varName);
+      if (it == this->Fields.end())
+      {
+        this->Fields.insert(it, std::pair<std::string,bool>(varName,false));
+      }
+    }
+    // Look for time variable - we need to match their names exactly
+    else if (varName.compare("time_instant\0") == 0)
+    {
+      timeVarName = "time_instant";
+    }
+    else if (varName.compare("time_centered\0") == 0)
+    {
+      timeVarName = "time_centered";
+    }
+  }
+  vtkDebugMacro("Number of data arrays found=" << this->Fields.size() << endl);
+  vtkDebugMacro("Name of time variable (if any)=" << timeVarName << endl);
+
+  // "time_counter" dimension should always be there but can be zero
+  // (e.g., file with initial data)
   size_t NumberOfTimeSteps = inputFile.GetDimLen("time_counter");
   vtkDebugMacro("Number of time steps in file=" << NumberOfTimeSteps << endl);
 
-  // Read time steps array, if available, and tell the pipeline
+  // If there are time steps (possibly just one), we always require a time variable
+  if (NumberOfTimeSteps > 0 and timeVarName.empty())
+  {
+    vtkErrorMacro("RequestInformation: Time steps but no time variable found in file." << endl);
+    return 0;
+  }
+
+  // Get VTK object for handing over time step information
+  vtkInformation *outInfo = outputVector->GetInformationObject(0);
+
+  // Read time variable if applicable, and tell the pipeline
   this->TimeSteps.clear();
   if (NumberOfTimeSteps > 0)
   {
-    this->TimeSteps = inputFile.GetVarDouble("time_instant", {0},
+    this->TimeSteps = inputFile.GetVarDouble(timeVarName, {0},
                                              {NumberOfTimeSteps});
 
     // Tell the pipeline which steps are available and their range
@@ -156,25 +199,6 @@ int vtkNetCDFLFRicReader::RequestInformation(
     vtkDebugMacro("Only single time step available" << endl);
   }
 
-  // Get variable names and populate "Fields" map, ignoring UGRID mesh definitions
-  for (std::string const &varName : inputFile.GetVarNames())
-  {
-    vtkDebugMacro("Considering variable name=" << varName << endl);
-
-    if (varName.compare(0, 6, "Mesh2d") != 0 &&
-        varName.compare(0, 11, "half_levels") != 0 &&
-        varName.compare(0, 11, "full_levels") != 0 &&
-        varName.compare(0, 12, "time_instant") != 0)
-    {
-      // If field is not in list, insert and default to "don't load"
-      std::map<std::string,bool>::const_iterator it = this->Fields.find(varName);
-      if (it == this->Fields.end())
-      {
-        this->Fields.insert(it, std::pair<std::string,bool>(varName,false));
-      }
-    }
-  }
-  vtkDebugMacro("Number of data arrays found=" << this->Fields.size() << endl);
   vtkDebugMacro("Finished RequestInformation" << endl);
 
   return 1;
@@ -196,7 +220,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
 
   if(this->FileName == nullptr)
   {
-    vtkErrorMacro("FileName not set.");
+    vtkErrorMacro("FileName not set." << endl);
     return 0;
   }
   vtkDebugMacro("FileName=" << FileName << endl);
@@ -224,14 +248,14 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // Read UGRID description from file and create unstructured VTK grid
   if (!this->CreateVTKGrid(inputFile, outputGrid))
   {
-    vtkErrorMacro("Could not create VTK grid.");
+    vtkErrorMacro("Could not create VTK grid." << endl);
     return 0;
   }
 
   // Load requested field data for requested time step
   if (!this->LoadFields(inputFile, outputGrid, timestep))
   {
-    vtkErrorMacro("Could not load field data.");
+    vtkErrorMacro("Could not load field data." << endl);
     return 0;
   }
 
@@ -369,7 +393,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   if (grid == nullptr)
   {
-    vtkErrorMacro("Grid data structure is not available.");
+    vtkErrorMacro("Grid data structure is not available." << endl);
     return 0;
   }
 
@@ -400,9 +424,34 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
                                                     {0}, {this->NumberOfLevels});
 
   // Node connectivity
-  const std::vector<unsigned long long> face_nodes = inputFile.GetVarULongLong(
-                                        "Mesh2d_full_levels_face_nodes",
-                                        {0,0}, {this->NumberOfFaces2D,nverts_per_face});
+  const std::vector<long long> face_nodes = inputFile.GetVarLongLong(
+                               "Mesh2d_full_levels_face_nodes",
+                               {0,0}, {this->NumberOfFaces2D,nverts_per_face});
+
+  // Work out horizontal grid ranges to distinguish cubed-sphere and biperiodic grids
+  double xmin = *std::min_element(node_coords_x.begin(), node_coords_x.end());
+  double xmax = *std::max_element(node_coords_x.begin(), node_coords_x.end());
+  double ymin = *std::min_element(node_coords_y.begin(), node_coords_y.end());
+  double ymax = *std::max_element(node_coords_y.begin(), node_coords_y.end());
+
+  double xshift;
+  double yshift;
+
+  // We expect a longitude range of 0..360 degrees for a cubed-sphere grid
+  if (xmin >= 0.0 and xmax <= 360.0)
+  {
+    xshift = 180.0;
+    yshift = 0.0;
+    vtkDebugMacro("Detected cubed-sphere grid, setting xshift=" <<
+                  xshift << " yshift=" << yshift << endl);
+  }
+  else
+  {
+    xshift = 0.5*(xmin + xmax);
+    yshift = 0.5*(ymin + ymax);
+    vtkDebugMacro("Detected grid other than cubed-sphere, setting xshift=" <<
+                  xshift << " yshift=" << yshift << endl);
+  }
 
   vtkDebugMacro("Setting VTK points..." << endl);
 
@@ -434,9 +483,9 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
     {
       for (size_t inode = 0; inode < nnodes; inode++)
       {
-        // Shift by 180 degrees to enable detection of grid periodicity
-        const double coords[3] = {node_coords_x[inode]-180.0,
-                                  node_coords_y[inode],
+        // Shift horizontal coordinates to enable resolution of grid periodicity
+        const double coords[3] = {node_coords_x[inode]-xshift,
+                                  node_coords_y[inode]-yshift,
                                   this->VerticalScale*(levels[ilevel] + this->VerticalBias)};
         points->InsertNextPoint(coords);
       }
@@ -484,16 +533,16 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
 
   if (grid == nullptr)
   {
-    vtkErrorMacro("Grid data structure not available.");
+    vtkErrorMacro("Grid data structure not available." << endl);
     return 0;
   }
 
   // Get edge-face connectivity for handling W2 horizontal fields
   // We have to assume here that the edges in the half-level edge and
   // half-level face grids coincide
-  const std::vector<unsigned long long> hl_edge_faces = inputFile.GetVarULongLong(
-                                        "Mesh2d_half_levels_edge_face_links",
-                                        {0,0}, {this->NumberOfEdges2D,2});
+  const std::vector<long long> hl_edge_faces = inputFile.GetVarLongLong(
+                               "Mesh2d_half_levels_edge_face_links",
+                               {0,0}, {this->NumberOfEdges2D,2});
 
   SetProgressText("Loading Field Data");
 
@@ -566,7 +615,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
       // Support for nodal grid (or other grids) will be added as needed
       else
       {
-        vtkErrorMacro("Unknown mesh.");
+        vtkErrorMacro("Unknown mesh." << endl);
         return 0;
       }
 
@@ -600,23 +649,26 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
           vtkWarningMacro("WARNING: edge-centered fields cannot be handled correctly at the moment" << endl);
           vtkDebugMacro("half level edge mesh: averaging four edges" << endl);
           dataField->Fill(0.0);
-          for (size_t edge = 0; edge < this->NumberOfEdges2D; edge++)
-	  {
-            // Each edge is shared by 2 faces
-            for (size_t side = 0; side < 2; side++)
-            {
-              // Look up face ID, then evaluate entire vertical column
-              const size_t face = static_cast<size_t>(hl_edge_faces[edge*2+side]);
-              for (size_t level = 0; level < (this->NumberOfLevels-1); level++)
-	      {
-                const vtkIdType cellId = static_cast<vtkIdType>(face+level*this->NumberOfFaces2D);
-                double fieldval = dataField->GetComponent(cellId, 0);
-                // Pick up data in edge grid
-                fieldval += 0.25*read_buffer[edge+level*this->NumberOfEdges2D];
-                dataField->SetComponent(cellId, 0, fieldval);
-              }
-            }
-          }
+
+          // This code is currently disabled until edge-centered field can be handled correctly
+          // for (size_t edge = 0; edge < this->NumberOfEdges2D; edge++)
+          // {
+          //   // Each edge is shared by 2 faces
+          //   for (size_t side = 0; side < 2; side++)
+          //   {
+          //     // Look up face ID, then evaluate entire vertical column
+          //     const size_t face = static_cast<size_t>(hl_edge_faces[edge*2+side]);
+          //     for (size_t level = 0; level < (this->NumberOfLevels-1); level++)
+          //     {
+          //       const vtkIdType cellId = static_cast<vtkIdType>(face+level*this->NumberOfFaces2D);
+          //       double fieldval = dataField->GetComponent(cellId, 0);
+          //       // Pick up data in edge grid
+          //       fieldval += 0.25*read_buffer[edge+level*this->NumberOfEdges2D];
+          //       dataField->SetComponent(cellId, 0, fieldval);
+          //     }
+          //   }
+          // }
+
           break;
         case nodal:
           vtkErrorMacro("nodal mesh: not currently supported" << endl);

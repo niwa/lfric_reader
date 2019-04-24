@@ -64,7 +64,8 @@ std::string netCDFLFRicFile::GetAttText(const std::string& varName, const std::s
   char *attText = new char[attTextLen+1];
   ncErrorMacro(nc_get_att_text(this->ncId, varId, attName.c_str(), attText));
 
-  std::string attTextStr(attText);
+  // We cannot assume that attText is always null-terminated, so copy only attTextLen bytes
+  std::string attTextStr(attText, attTextLen);
   delete[] attText;
 
   return attTextStr;
@@ -105,13 +106,15 @@ std::vector<std::string> netCDFLFRicFile::GetVarNames()
   ncErrorMacro(nc_inq_nvars(this->ncId, &numVars));
   varNames.resize(numVars);
 
+  // NetCDF variables can use up to NC_MAX_NAME bytes
+  char *varName = new char[NC_MAX_NAME+1];
   for (int iVar = 0; iVar < numVars; iVar++)
   {
-    char varName[NC_MAX_NAME+1];
     ncErrorMacro(nc_inq_varname(this->ncId, iVar, varName));
+    // NetCDF docs say that variable names are guaranteed to be null-terminated
     varNames[iVar] = varName;
   }
-
+  delete[] varName;
   return varNames;
 }
 
@@ -147,10 +150,10 @@ std::vector<double> netCDFLFRicFile::GetVarDouble(
 
 //----------------------------------------------------------------------------
 
-std::vector<unsigned long long> netCDFLFRicFile::GetVarULongLong(
-                                const std::string& varName,
-                                const std::initializer_list<size_t> start,
-                                const std::initializer_list<size_t> count)
+std::vector<long long> netCDFLFRicFile::GetVarLongLong(
+                       const std::string& varName,
+                       const std::initializer_list<size_t> start,
+                       const std::initializer_list<size_t> count)
 {
   int varId;
   ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
@@ -161,12 +164,12 @@ std::vector<unsigned long long> netCDFLFRicFile::GetVarULongLong(
     size *= n;
   }
 
-  std::vector<unsigned long long> varData;
+  std::vector<long long> varData;
   varData.resize(size);
 
-  // netCDF will automatically convert non-double numeric data into unsigned long long
-  ncErrorMacro(nc_get_vara_ulonglong(this->ncId, varId, start.begin(),
-                                     count.begin(), varData.data()));
+  // netCDF will automatically convert non-double numeric data into long long
+  ncErrorMacro(nc_get_vara_longlong(this->ncId, varId, start.begin(),
+                                    count.begin(), varData.data()));
 
   return varData;
 }

@@ -33,9 +33,9 @@ public:
                                    const std::initializer_list<size_t> start,
                                    const std::initializer_list<size_t> count);
 
-  std::vector<unsigned long long> GetVarULongLong(const std::string& varName,
-                                                  const std::initializer_list<size_t> start,
-                                                  const std::initializer_list<size_t> count);
+  std::vector<long long> GetVarLongLong(const std::string& varName,
+                                        const std::initializer_list<size_t> start,
+                                        const std::initializer_list<size_t> count);
 
 private:
 
