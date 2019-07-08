@@ -386,67 +386,67 @@ void vtkNetCDFLFRicReader::mirror_points(vtkSmartPointer<vtkUnstructuredGrid> gr
       for (vtkIdType pointIdIndex = 0; pointIdIndex < 8; pointIdIndex++)
       {
 
-	vtkIdType thisPointId = oldCellPoints->GetId(pointIdIndex);
-	double thisPointCoords[3];
-	grid->GetPoint(thisPointId, thisPointCoords);
+        vtkIdType thisPointId = oldCellPoints->GetId(pointIdIndex);
+        double thisPointCoords[3];
+        grid->GetPoint(thisPointId, thisPointCoords);
 
-	// Mirror corner point
-	if (spanX and spanY and thisPointCoords[0] < 0 and thisPointCoords[1] < 0)
+        // Mirror corner point
+        if (spanX and spanY and thisPointCoords[0] < 0 and thisPointCoords[1] < 0)
         {
-	  // Keep track of mirrored points to avoid degeneracy; insert a new point if
-	  // no mirror point has been created yet
-	  mirrorPointsIt = mirrorPointsXY.find(thisPointId);
-	  if (mirrorPointsIt == mirrorPointsXY.end())
+          // Keep track of mirrored points to avoid degeneracy; insert a new point if
+          // no mirror point has been created yet
+          mirrorPointsIt = mirrorPointsXY.find(thisPointId);
+          if (mirrorPointsIt == mirrorPointsXY.end())
           {
             vtkIdType newPointId = gridPoints->InsertNextPoint(-thisPointCoords[0],
                                                                -thisPointCoords[1],
                                                                 thisPointCoords[2]);
             mirrorPointsXY.insert({thisPointId, newPointId});
             newCellPoints[pointIdIndex] = newPointId;
-	  }
+          }
           else
           {
             newCellPoints[pointIdIndex] = mirrorPointsIt->second;
           }
-	}
-	// Mirror point on left domain boundary
-	else if (spanX && thisPointCoords[0] < 0)
+        }
+        // Mirror point on left domain boundary
+        else if (spanX && thisPointCoords[0] < 0)
         {
           mirrorPointsIt = mirrorPointsX.find(thisPointId);
-	  if (mirrorPointsIt == mirrorPointsX.end())
+          if (mirrorPointsIt == mirrorPointsX.end())
           {
             vtkIdType newPointId = gridPoints->InsertNextPoint(-thisPointCoords[0],
                                                                 thisPointCoords[1],
                                                                 thisPointCoords[2]);
             mirrorPointsX.insert({thisPointId, newPointId});
             newCellPoints[pointIdIndex] = newPointId;
-	  }
+          }
           else {
             newCellPoints[pointIdIndex] = mirrorPointsIt->second;
           }
-	}
-	// Mirror points on bottom domain boundary
-	else if (spanY && thisPointCoords[1] < 0)
+        }
+        // Mirror points on bottom domain boundary
+        else if (spanY && thisPointCoords[1] < 0)
         {
           mirrorPointsIt = mirrorPointsY.find(thisPointId);
-	  if (mirrorPointsIt == mirrorPointsY.end())
+          if (mirrorPointsIt == mirrorPointsY.end())
           {
             vtkIdType newPointId = gridPoints->InsertNextPoint(thisPointCoords[0],
                                                               -thisPointCoords[1],
                                                                thisPointCoords[2]);
             mirrorPointsY.insert({thisPointId, newPointId});
             newCellPoints[pointIdIndex] = newPointId;
-	  }
+          }
           else
           {
             newCellPoints[pointIdIndex] = mirrorPointsIt->second;
           }
-	}
-	// No mirror point needed
-	else
+        }
+        // No mirror point needed
+        else
         {
-	  newCellPoints[pointIdIndex] = thisPointId;
-	}
+          newCellPoints[pointIdIndex] = thisPointId;
+        }
 
       }
       grid->ReplaceCell(cellId, 8, newCellPoints);
@@ -660,11 +660,11 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
       bool hasTimeDim = inputFile.VarHasDim(varName, "time_counter");
       if (hasTimeDim)
       {
-	vtkDebugMacro("Found time dimension" << endl);
+        vtkDebugMacro("Found time dimension" << endl);
       }
       else
       {
-	vtkDebugMacro("Found NO time dimension" << endl);
+        vtkDebugMacro("Found NO time dimension" << endl);
       }
 
       std::vector<double> read_buffer;
