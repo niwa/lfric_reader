@@ -8,8 +8,10 @@
 #include <vtkDoubleArray.h>
 #include <vtkCellData.h>
 #include <vtkMath.h>
+#include <vtkUnsignedCharArray.h>
 
 #include <unordered_map>
+#include <algorithm>
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkNetCDFLFRicReader)
@@ -33,7 +35,7 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->VerticalBias = 1.0;
   this->Fields.clear();
   this->TimeSteps.clear();
-  this->NumberOfLevels = 0;
+  this->NumberOfLevelsGlobal = 0;
   this->NumberOfFaces2D = 0;
   this->NumberOfEdges2D = 0;
 
@@ -184,7 +186,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
 
     // Tell the pipeline which steps are available and their range
     outInfo->Set(vtkStreamingDemandDrivenPipeline::TIME_STEPS(),
-		 this->TimeSteps.data(), static_cast<int>(this->TimeSteps.size()));
+                 this->TimeSteps.data(), static_cast<int>(this->TimeSteps.size()));
 
     double timeRange[2] = {this->TimeSteps.front(), this->TimeSteps.back()};
     outInfo->Set(vtkStreamingDemandDrivenPipeline::TIME_RANGE(), timeRange, 2);
@@ -199,6 +201,14 @@ int vtkNetCDFLFRicReader::RequestInformation(
     vtkDebugMacro("Only single time step available" << endl);
   }
 
+  // Reader supports pieces (partitioning) for parallel operation
+  // Data is partitioned by vertical layers, so we can produce
+  // only as many pieces as there are levels
+  outInfo->Set(vtkAlgorithm::CAN_HANDLE_PIECE_REQUEST(), 1);
+  this->NumberOfLevelsGlobal = inputFile.GetDimLen("half_levels");
+  vtkDebugMacro("NumberOfLevelsGlobal (max number of pieces)=" <<
+                this->NumberOfLevelsGlobal << endl);
+
   vtkDebugMacro("Finished RequestInformation" << endl);
 
   return 1;
@@ -208,8 +218,8 @@ int vtkNetCDFLFRicReader::RequestInformation(
 // Create VTK grid and load data for requested time step (defaults to first one)
 // Convention is that this function returns 1 on success, or 0 otherwise
 int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
-				      vtkInformationVector **vtkNotUsed(inputVector),
-				      vtkInformationVector *outputVector)
+                                      vtkInformationVector **vtkNotUsed(inputVector),
+                                      vtkInformationVector *outputVector)
 {
   vtkDebugMacro("Entering RequestData..." << endl);
 
@@ -243,17 +253,84 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
     vtkDebugMacro("Defaulting to timestep=" << timestep << endl);
   }
 
+  // Find out required partition and ghost levels
+  int piece = outInfo->Get(
+      vtkStreamingDemandDrivenPipeline::UPDATE_PIECE_NUMBER());
+  int numPieces = outInfo->Get(
+      vtkStreamingDemandDrivenPipeline::UPDATE_NUMBER_OF_PIECES());
+  int numGhosts = outInfo->Get(
+      vtkStreamingDemandDrivenPipeline::UPDATE_NUMBER_OF_GHOST_LEVELS());
+
+  vtkDebugMacro("piece=" << piece << " numPieces=" << numPieces <<
+                " numGhosts=" << numGhosts << endl);
+
+  if (numPieces > this->NumberOfLevelsGlobal)
+  {
+    vtkErrorMacro("Pipeline requested " << numPieces <<
+                  " pieces but reader can only provide " <<
+                  this->NumberOfLevelsGlobal << endl);
+    return 0;
+  }
+
+  // Distribute vertical levels evenly across pieces. If there
+  // is a non-zero remainder, add one layer to first few pieces
+  // Use int here to handle potentially negative results when
+  // ghost layers are added.
+  int numLevels = this->NumberOfLevelsGlobal/numPieces;
+  int remainder = this->NumberOfLevelsGlobal%numPieces;
+  int startLevel = numLevels*piece + remainder;
+  if (piece < remainder)
+  {
+    numLevels++;
+    startLevel = numLevels*piece;
+  }
+  vtkDebugMacro("startLevel=" << startLevel << " numLevels=" << numLevels << endl);
+
+  // Add ghost levels but limit them to available level range
+  // We need to mark ghost cells in VTK grid, so keep track of
+  // ghost levels
+  int numGhostsBelow = std::min(numGhosts, startLevel);
+  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->NumberOfLevelsGlobal)-
+                                (startLevel+numLevels));
+  startLevel -= numGhostsBelow;
+  numLevels += numGhostsBelow + numGhostsAbove;
+  vtkDebugMacro("numGhostsBelow=" << numGhostsBelow <<
+                " numGhostsAbove=" << numGhostsAbove <<
+                " startLevel=" << startLevel << " numLevels=" <<
+                numLevels << endl);
+
+  // Sanity checks
+  size_t stopLevel = static_cast<size_t>(startLevel+numLevels);
+  if ((startLevel < 0) || (stopLevel > this->NumberOfLevelsGlobal))
+  {
+    vtkErrorMacro("Erroneous level range encountered: " << startLevel <<
+                  "..." << (stopLevel-1) << endl);
+    return 0;
+  }
+  if ((numGhostsBelow < 0) || (numGhostsAbove < 0))
+  {
+    vtkErrorMacro("Erroneous ghost levels encountered: " << numGhostsBelow <<
+                  " " << numGhostsAbove << endl);
+    return 0;
+  }
+
   netCDFLFRicFile inputFile(this->FileName);
 
   // Read UGRID description from file and create unstructured VTK grid
-  if (!this->CreateVTKGrid(inputFile, outputGrid))
+  if (!this->CreateVTKGrid(inputFile, outputGrid,
+                           static_cast<size_t>(startLevel),
+                           static_cast<size_t>(numLevels),
+                           static_cast<size_t>(numGhostsAbove),
+                           static_cast<size_t>(numGhostsBelow)))
   {
     vtkErrorMacro("Could not create VTK grid." << endl);
     return 0;
   }
 
   // Load requested field data for requested time step
-  if (!this->LoadFields(inputFile, outputGrid, timestep))
+  if (!this->LoadFields(inputFile, outputGrid, timestep,
+                        static_cast<size_t>(startLevel),
+                        static_cast<size_t>(numLevels)))
   {
     vtkErrorMacro("Could not load field data." << endl);
     return 0;
@@ -387,7 +464,9 @@ void vtkNetCDFLFRicReader::mirror_points(vtkSmartPointer<vtkUnstructuredGrid> gr
 // The VTK grid replicates the "full level face grid" in the
 // LFRic output file, data that is stored on the other grids
 // is mapped onto this VTK grid
-int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid)
+int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid,
+                                        const size_t startLevel, const size_t numLevels,
+                                        const size_t numGhostsAbove, const size_t numGhostsBelow)
 {
   vtkDebugMacro("Entering CreateVTKGrid..." << endl);
 
@@ -400,9 +479,6 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   // Read various dimensions, keep some of them in our object
   const size_t nnodes = inputFile.GetDimLen("nMesh2d_full_levels_node");
   vtkDebugMacro("nnodes=" << nnodes << endl);
-
-  this->NumberOfLevels = inputFile.GetDimLen("full_levels");
-  vtkDebugMacro("NumberOfLevels=" << this->NumberOfLevels << endl);
 
   this->NumberOfFaces2D = inputFile.GetDimLen("nMesh2d_full_levels_face");
   vtkDebugMacro("NumberOfFaces2D=" << this->NumberOfFaces2D << endl);
@@ -419,9 +495,9 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   const std::vector<double> node_coords_y = inputFile.GetVarDouble("Mesh2d_full_levels_node_y",
                                                           {0}, {nnodes});
 
-  // Vertical level heights
+  // Vertical vertex heights for this piece
   const std::vector<double> levels = inputFile.GetVarDouble("full_levels",
-                                                    {0}, {this->NumberOfLevels});
+                                                            {startLevel}, {numLevels+1});
 
   // Node connectivity
   const std::vector<long long> face_nodes = inputFile.GetVarLongLong(
@@ -460,7 +536,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   if (this->UseCartCoords)
   {
     const double deg2rad = vtkMath::Pi()/180.0;
-    for (size_t ilevel = 0; ilevel < this->NumberOfLevels; ilevel++)
+    for (size_t ilevel = 0; ilevel < (numLevels+1); ilevel++)
     {
       for (size_t inode = 0; inode < nnodes; inode++)
       {
@@ -479,7 +555,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   }
   else
   {
-    for (size_t ilevel = 0; ilevel < this->NumberOfLevels; ilevel++)
+    for (size_t ilevel = 0; ilevel < (numLevels+1); ilevel++)
     {
       for (size_t inode = 0; inode < nnodes; inode++)
       {
@@ -495,13 +571,12 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   vtkDebugMacro("Setting VTK cells..." << endl);
 
-  // Build up grid cells vertical layer-wise
-  grid->Allocate(static_cast<vtkIdType>(this->NumberOfFaces2D*(this->NumberOfLevels-1)));
+  // Build up grid cells for this piece vertical layer-wise
+  grid->Allocate(static_cast<vtkIdType>(this->NumberOfFaces2D*numLevels));
 
-  // Number of cells in the vertical = number of full levels - 1
   std::vector<vtkIdType> cell_verts;
   cell_verts.resize(2*nverts_per_face);
-  for (size_t ilevel = 0; ilevel < this->NumberOfLevels-1; ilevel++)
+  for (size_t ilevel = 0; ilevel < numLevels; ilevel++)
   {
     for (size_t iface = 0; iface < this->NumberOfFaces2D; iface++)
     {
@@ -512,6 +587,29 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
       }
       grid->InsertNextCell(VTK_HEXAHEDRON, static_cast<vtkIdType>(2*nverts_per_face),
                            cell_verts.data());
+    }
+  }
+
+  // Mark ghost cells as "duplicate cell"
+  if (numGhostsAbove > 0 || numGhostsBelow > 0)
+  {
+    grid->AllocateCellGhostArray();
+    vtkUnsignedCharArray * ghosts = grid->GetCellGhostArray();
+    vtkIdType cellId = 0;
+    for (size_t ilevel = 0; ilevel < numLevels; ilevel++)
+    {
+      if ((ilevel < numGhostsBelow) || (ilevel > (numLevels-numGhostsAbove-1)))
+      {
+        for (size_t iface = 0; iface < this->NumberOfFaces2D; iface++)
+        {
+          ghosts->SetValue(cellId, vtkDataSetAttributes::DUPLICATECELL);
+          cellId++;
+        }
+      }
+      else
+      {
+        cellId += this->NumberOfFaces2D;
+      }
     }
   }
 
@@ -527,7 +625,9 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 }
 
 // Read field data from netCDF file and add to the VTK grid
-int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid* grid, const size_t timestep)
+int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid* grid,
+                                     const size_t timestep, const size_t startLevel,
+                                     const size_t numLevels)
 {
   vtkDebugMacro("Entering LoadFields..." << endl);
 
@@ -579,11 +679,11 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
         vtkDebugMacro("Field is defined on half level face mesh" << endl);
         if (hasTimeDim)
         {
-          read_buffer = inputFile.GetVarDouble(varName, {timestep,0,0}, {1,this->NumberOfLevels-1,this->NumberOfFaces2D});
+          read_buffer = inputFile.GetVarDouble(varName, {timestep,startLevel,0}, {1,numLevels,this->NumberOfFaces2D});
         }
         else
         {
-          read_buffer = inputFile.GetVarDouble(varName, {0,0}, {this->NumberOfLevels-1,this->NumberOfFaces2D});
+          read_buffer = inputFile.GetVarDouble(varName, {startLevel,0}, {numLevels,this->NumberOfFaces2D});
         }
       }
       else if ( mesh_name == "Mesh2d_edge_half_levels" )
@@ -592,11 +692,11 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
         vtkDebugMacro("Field is defined on half level edge mesh" << endl);
         if (hasTimeDim)
         {
-          read_buffer = inputFile.GetVarDouble(varName, {timestep,0,0}, {1,this->NumberOfLevels-1,this->NumberOfEdges2D});
+          read_buffer = inputFile.GetVarDouble(varName, {timestep,startLevel,0}, {1,numLevels,this->NumberOfEdges2D});
         }
         else
         {
-          read_buffer = inputFile.GetVarDouble(varName, {0,0}, {this->NumberOfLevels-1,this->NumberOfEdges2D});
+          read_buffer = inputFile.GetVarDouble(varName, {startLevel,0}, {numLevels,this->NumberOfEdges2D});
         }
       }
       else if ( mesh_name == "Mesh2d_full_levels" )
@@ -605,11 +705,11 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
         vtkDebugMacro("Field is defined on full level face mesh" << endl);
         if (hasTimeDim)
         {
-          read_buffer = inputFile.GetVarDouble(varName, {timestep,0,0}, {1,this->NumberOfLevels,this->NumberOfFaces2D});
+          read_buffer = inputFile.GetVarDouble(varName, {timestep,startLevel,0}, {1,numLevels+1,this->NumberOfFaces2D});
         }
         else
         {
-          read_buffer = inputFile.GetVarDouble(varName, {0,0}, {this->NumberOfLevels,this->NumberOfFaces2D});
+          read_buffer = inputFile.GetVarDouble(varName, {startLevel,0}, {numLevels+1,this->NumberOfFaces2D});
         }
       }
       // Support for nodal grid (or other grids) will be added as needed
@@ -624,25 +724,25 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
       // Create vtkDoubleArray for field data, vector components are stored separately
       vtkSmartPointer<vtkDoubleArray> dataField = vtkSmartPointer<vtkDoubleArray>::New();
       dataField->SetNumberOfComponents(1);
-      dataField->SetNumberOfTuples((this->NumberOfLevels-1)*this->NumberOfFaces2D);
+      dataField->SetNumberOfTuples(numLevels*this->NumberOfFaces2D);
       dataField->SetName(varName.c_str());
 
       switch(mesh_type)
       {
         case half_level_face :
           vtkDebugMacro("half level face mesh: no interpolation needed" << endl);
-          for (size_t i = 0; i < (this->NumberOfLevels-1)*this->NumberOfFaces2D; i++)
+          for (size_t i = 0; i < numLevels*this->NumberOfFaces2D; i++)
           {
-	    dataField->SetComponent(static_cast<vtkIdType>(i), 0, read_buffer[i]);
+            dataField->SetComponent(static_cast<vtkIdType>(i), 0, read_buffer[i]);
           }
           break;
         case full_level_face :
           vtkDebugMacro("full level face mesh: averaging top and bottom faces" << endl);
-          for (size_t i = 0; i < (this->NumberOfLevels-1)*this->NumberOfFaces2D; i++)
+          for (size_t i = 0; i < numLevels*this->NumberOfFaces2D; i++)
           {
             const double bottomval = read_buffer[i];
             const double topval = read_buffer[i+this->NumberOfFaces2D];
-           dataField->SetComponent(static_cast<vtkIdType>(i), 0, 0.5*(bottomval+topval));
+            dataField->SetComponent(static_cast<vtkIdType>(i), 0, 0.5*(bottomval+topval));
           }
           break;
         case half_level_edge:
@@ -651,6 +751,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
           dataField->Fill(0.0);
 
           // This code is currently disabled until edge-centered field can be handled correctly
+          // It also needs to be modified to handle piece requests (startLevel/stopLevel)
           // for (size_t edge = 0; edge < this->NumberOfEdges2D; edge++)
           // {
           //   // Each edge is shared by 2 faces
@@ -677,7 +778,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
 
       grid->GetCellData()->AddArray(dataField);
 
-      fieldCount += 1;
+      fieldCount++;
       this->UpdateProgress(static_cast<float>(fieldCount)/
                            static_cast<float>(this->Fields.size()));
     }

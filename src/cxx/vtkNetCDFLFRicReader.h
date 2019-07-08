@@ -71,10 +71,14 @@ protected:
                   vtkInformationVector *) override;
 
   // Build VTK grid from UGRID description
-  int CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid);
+  int CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid,
+                    const size_t startLevel, const size_t numLevels,
+                    const size_t numGhostsAbove, const size_t numGhostsBelow);
 
   // Read selected field data from netCDF file and add to the VTK grid
-  int LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid, const size_t timestep);
+  int LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid,
+                 const size_t timestep, const size_t startLevel,
+                 const size_t numLevels);
 
   // Transforms periodic grid into non-periodic grid by replicating vertices (points)
   void mirror_points(vtkSmartPointer<vtkUnstructuredGrid> grid);
@@ -89,7 +93,7 @@ private:
   double VerticalScale, VerticalBias;
   std::map<std::string,bool> Fields;
   std::vector<double> TimeSteps;
-  size_t NumberOfLevels, NumberOfFaces2D, NumberOfEdges2D;
+  size_t NumberOfLevelsGlobal, NumberOfFaces2D, NumberOfEdges2D;
 
 };
 #endif

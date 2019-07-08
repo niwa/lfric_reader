@@ -48,9 +48,22 @@ The reader currently includes the following features:
 * Visualisation of LFRic fields that are stored in the "full-level" and "half-level" grids
 * Visualisation using Cartesian coordinates and longitude-latitude-radius coordinates
 * Automatic handling of periodic grids (vertices are automatically mirrored)
+* Support for very large data files using parallel operation
 
 Limitations:
 * Fields on "full-level" grids are interpolated onto "half-level" grids using nearest-neighbour averaging, resulting in cell-based VTK data
 * Fields that are stored on "edge" grids are not yet fully supported
 * Vector fields are not yet recognised and appear as scalar component fields
 * Vector components are not yet transformed to Cartesian coordinates
+
+## Parallelisation
+
+The LFRic reader supports MPI-based parallelisation with VTK's parallel pipelines, allowing users to visualise very large datafiles on high-performance systems. This requires using a separate ParaView Server. When the server is launched on more than one MPI process, the reader will automatically only load a subset of the data from the netCDF file on each process. This enables parallel read from disk, reduces memory consumption per process, and parallel pipeline operation for faster computation.
+
+Grids are automatically partitioned along the vertical axis, which is the only structured axis in the data. Users are free to choose any number of MPI processes up to the number of available vertical layers.
+
+To operate the LFRic reader in parallel, you will need to build ParaView with MPI support (```-DPARAVIEW_USE_MPI=ON```) and launch a separate ParaView Server using
+```
+mpiexec -np <number of processes> pvserver
+```
+The server will report its port number (the default is 11111) and wait for a connection. Launch the GUI and connect it to the server by clicking on "Connect" in the toolbar. Create a new connection, entering the server hostname, e.g., "localhost" if you run the server on the same machine as the GUI or if you use an ssh tunnel, as well as the server port number. If the server connection is successful, the server name in the "Pipeline Browser" should change from "builtin:" to the server name, and you will see the file space accessible to the server when you try to open a file.
