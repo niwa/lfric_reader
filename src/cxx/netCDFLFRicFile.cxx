@@ -1,6 +1,8 @@
 #include "netCDFLFRicFile.h"
 #include <vtk_netcdf.h>
 #include <iostream>
+#include <sstream>
+#include <iterator>
 
 #define ncErrorMacro(e) if (e != NC_NOERR) {std::cerr << "NetCDF Error: " << nc_strerror(e) << "\n";}
 
@@ -53,6 +55,39 @@ size_t netCDFLFRicFile::GetDimLen(const std::string& dimName)
 
 //----------------------------------------------------------------------------
 
+std::string netCDFLFRicFile::GetVarDimName(const std::string& varName,
+                                           const size_t dim)
+{
+  int varId;
+  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
+
+  int numDims;
+  ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
+
+  std::string dimNameStr;
+  dimNameStr.clear();
+
+  // Return empty string if out of range
+  if (dim >= 0 and dim < numDims)
+  {
+    std::vector<int> dimIds;
+    dimIds.resize(numDims);
+    ncErrorMacro(nc_inq_vardimid(this->ncId, varId, dimIds.data()));
+
+    char *dimName = new char[NC_MAX_NAME+1];
+    ncErrorMacro(nc_inq_dimname(this->ncId, dimIds[dim], dimName));
+
+    // NetCDF docs say that dimension names are guaranteed to be null-terminated
+    dimNameStr = dimName;
+
+    delete[] dimName;
+  }
+
+  return dimNameStr;
+}
+
+//----------------------------------------------------------------------------
+
 std::string netCDFLFRicFile::GetAttText(const std::string& varName, const std::string& attName)
 {
   int varId;
@@ -69,6 +104,18 @@ std::string netCDFLFRicFile::GetAttText(const std::string& varName, const std::s
   delete[] attText;
 
   return attTextStr;
+}
+
+//----------------------------------------------------------------------------
+
+std::vector<std::string> netCDFLFRicFile::GetAttTextSplit(const std::string& varName,
+                                                          const std::string& attName)
+{
+  std::string attText = this->GetAttText(varName, attName);
+  std::istringstream attStream(attText);
+  std::vector<std::string> textSplit(std::istream_iterator<std::string>{attStream},
+                                     std::istream_iterator<std::string>());
+  return textSplit;
 }
 
 //----------------------------------------------------------------------------
@@ -95,6 +142,29 @@ bool netCDFLFRicFile::VarHasDim(const std::string& varName, const std::string& d
   }
 
   return dimFound;
+}
+
+//----------------------------------------------------------------------------
+
+bool netCDFLFRicFile::VarHasAtt(const std::string& varName, const std::string& attName)
+{
+  int varId;
+  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
+
+  int attId;
+  int result = nc_inq_attid(this->ncId, varId, attName.c_str(), &attId);
+  if (result == NC_NOERR)
+  {
+    return true;
+  }
+  else if (result == NC_ENOTATT)
+  {
+    return false;
+  }
+  else
+  {
+    ncErrorMacro(result);
+  }
 }
 
 //----------------------------------------------------------------------------
