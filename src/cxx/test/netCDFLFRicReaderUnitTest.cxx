@@ -1,10 +1,6 @@
 #include "Catch2/catch.hpp"
 #include "vtkNetCDFLFRicReader.h"
 
-// Two-level macro definition to stringize macro
-#define MACRO2STRING(s) STRING(s)
-#define STRING(s) #s
-
 // ------------------------------------------------------------------------------------------
 
 TEST_CASE( "Basic Class Tests", "[basic]" )
@@ -63,31 +59,21 @@ TEST_CASE( "CanReadFile Method", "[vtk_interface]" )
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
 
-  const std::string dataFilePath = MACRO2STRING(TEST_DATA_DIR);
-
   SECTION( "Nullpointer as filename" )
   {
     const int result = reader->CanReadFile(nullptr);
     REQUIRE( result == 0 );
   }
 
-  SECTION( "Nonexistent file" )
-  {
-    const int result = reader->CanReadFile("thisfiledoesnotexist.nc");
-    REQUIRE( result == 0 );
-  }
-
   SECTION( "Invalid file" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_invalid.nc";
-    const int result = reader->CanReadFile(dataFile.c_str());
+    const int result = reader->CanReadFile("testdata_invalid.nc");
     REQUIRE( result == 0 );
   }
 
   SECTION( "Valid file" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    const int result = reader->CanReadFile(dataFile.c_str());
+    const int result = reader->CanReadFile("testdata_valid.nc");
     REQUIRE( result == 1 );
   }
 
@@ -102,8 +88,6 @@ TEST_CASE( "GetNumberOfCellArrays Method", "[paraview_interface]" )
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
 
-  const std::string dataFilePath = MACRO2STRING(TEST_DATA_DIR);
-
   SECTION( "No file loaded" )
   {
     const int result = reader->GetNumberOfCellArrays();
@@ -112,11 +96,10 @@ TEST_CASE( "GetNumberOfCellArrays Method", "[paraview_interface]" )
 
   SECTION( "File loaded" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
     const int result = reader->GetNumberOfCellArrays();
-    REQUIRE( result == 5 );
+    REQUIRE( result == 3 );
   }
 
   reader->Delete();
@@ -130,12 +113,9 @@ TEST_CASE( "GetCellArrayName Method", "[paraview_interface]" )
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
 
-  const std::string dataFilePath = MACRO2STRING(TEST_DATA_DIR);
-
   SECTION( "Invalid Index (negative)" )
   {
-    std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
     const char* result = reader->GetCellArrayName(-1);
     REQUIRE( result == nullptr );
@@ -143,8 +123,7 @@ TEST_CASE( "GetCellArrayName Method", "[paraview_interface]" )
 
   SECTION( "Invalid Index (too large)" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
     const char* result = reader->GetCellArrayName(100);
     REQUIRE( result == nullptr );
@@ -152,11 +131,10 @@ TEST_CASE( "GetCellArrayName Method", "[paraview_interface]" )
 
   SECTION( "Valid Index" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
     const std::string result(reader->GetCellArrayName(0));
-    REQUIRE( result == "buoyancy" );
+    REQUIRE( result == "var1" );
   }
 
   reader->Delete();
@@ -170,12 +148,9 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
 
-  const std::string dataFilePath = MACRO2STRING(TEST_DATA_DIR);
-
   SECTION( "GetCellArrayStatus with Invalid Array Name" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
     const int result = reader->GetCellArrayStatus("thisfielddoesnotexist");
     REQUIRE( result == 0 );
@@ -183,8 +158,7 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
 
   SECTION( "GetCellArrayStatus Default Status" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
     for (int iarray = 0; iarray < reader->GetNumberOfCellArrays(); iarray++)
     {
@@ -196,8 +170,7 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
 
   SECTION( "SetCellArrayStatus with Invalid Array Name" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
     reader->SetCellArrayStatus("thisfielddoesnotexist",1);
     // Check if this has affected the status any of the existing arrays
@@ -211,8 +184,7 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
 
   SECTION( "SetCellArrayStatus with Valid Array Name" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
 
     const int testarrayidx = 0;

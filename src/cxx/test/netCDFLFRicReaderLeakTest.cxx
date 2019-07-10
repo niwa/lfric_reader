@@ -1,22 +1,15 @@
 #include "Catch2/catch.hpp"
 #include "vtkNetCDFLFRicReader.h"
 
-// Two-level macro definition to stringize macro
-#define MACRO2STRING(s) STRING(s)
-#define STRING(s) #s
-
 // ------------------------------------------------------------------------------------------
 
 TEST_CASE( "Leak Test", "[leak]" )
 {
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
 
-  const std::string dataFilePath = MACRO2STRING(TEST_DATA_DIR);
-
   SECTION( "Load and Reload All Arrays Several Times" )
   {
-    const std::string dataFile = dataFilePath + "/testdata_valid.nc";
-    reader->SetFileName(dataFile.c_str());
+    reader->SetFileName("testdata_valid.nc");
     reader->Update();
 
     const int nTimes = 10;

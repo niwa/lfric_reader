@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.1)
 
 # Source code requires at least C++ 11
 set (CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+
+# Default to optimised build
+if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+endif()
+
+# Adds option -DBUILD_TESTING
+include(CTest)
 
 # Locate ParaView build and import CMake config, macros etc.
 FIND_PACKAGE(ParaView REQUIRED)
@@ -20,8 +29,6 @@ ADD_PARAVIEW_PLUGIN(
     SOURCES netCDFLFRicFile.cxx
     REQUIRED_ON_SERVER)
 
-option(BUILD_TESTING "Build Testing" OFF)
 if(BUILD_TESTING)
-  include(CTest)
   add_subdirectory(test)
 endif()
