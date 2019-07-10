@@ -37,6 +37,13 @@ netCDFLFRicFile::~netCDFLFRicFile()
 
 //----------------------------------------------------------------------------
 
+bool netCDFLFRicFile::IsFileOpen()
+{
+  return this->fileOpen;
+}
+
+//----------------------------------------------------------------------------
+
 const char* netCDFLFRicFile::GetFileName()
 {
   return this->FileName.c_str();

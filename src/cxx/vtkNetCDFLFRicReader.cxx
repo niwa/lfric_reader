@@ -85,6 +85,11 @@ int vtkNetCDFLFRicReader::CanReadFile(const char* fileName)
   vtkDebugMacro("fileName=" << fileName << endl);
 
   netCDFLFRicFile inputFile(fileName);
+  if (not inputFile.IsFileOpen())
+  {
+    vtkErrorMacro("CanReadFile: Failed to open file " << fileName);
+    return 0;
+  }
 
   // Full-level mesh is needed to construct VTK grid
   bool valid = false;
@@ -125,6 +130,11 @@ int vtkNetCDFLFRicReader::RequestInformation(
 
   // Open input file
   netCDFLFRicFile inputFile(this->FileName);
+  if (not inputFile.IsFileOpen())
+  {
+    vtkErrorMacro("Failed to open file " << this->FileName << endl);
+    return 0;
+  }
 
   // Get variable names and populate "Fields" map, ignoring UGRID mesh definitions
   // Also try and find variable with time step times
@@ -310,6 +320,11 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   }
 
   netCDFLFRicFile inputFile(this->FileName);
+  if (not inputFile.IsFileOpen())
+  {
+    vtkErrorMacro("Failed to open file " << this->FileName << endl);
+    return 0;
+  }
 
   // Read UGRID description from file and create unstructured VTK grid
   if (!this->CreateVTKGrid(inputFile, outputGrid,

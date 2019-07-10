@@ -65,6 +65,12 @@ TEST_CASE( "CanReadFile Method", "[vtk_interface]" )
     REQUIRE( result == 0 );
   }
 
+  SECTION( "Nonexistent File" )
+  {
+    const int result = reader->CanReadFile("filedoesnotexist");
+    REQUIRE( result == 0 );
+  }
+
   SECTION( "Invalid file" )
   {
     const int result = reader->CanReadFile("testdata_invalid.nc");

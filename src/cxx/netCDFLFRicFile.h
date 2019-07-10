@@ -19,6 +19,8 @@ public:
   netCDFLFRicFile(const char* fileName);
   ~netCDFLFRicFile();
 
+  bool IsFileOpen();
+
   const char* GetFileName();
 
   size_t GetDimLen(const std::string& dimName);
