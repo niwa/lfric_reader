@@ -139,6 +139,11 @@ void generate_testfile(const bool valid)
                           Mesh2dFullLevelsEdgeYDims,
                           &Mesh2dFullLevelsEdgeYId));
 
+  const int FullLevelsDims[] = {levelsDimId};
+  int FullLevelsId;
+  ncErrorMacro(nc_def_var(ncId, "full_levels", NC_FLOAT, 1, FullLevelsDims,
+                          &FullLevelsId));
+
   // Set UGRID mesh variable attributes
   ncErrorMacro(nc_put_att_text(ncId, Mesh2dFullLevelsId, "cf_role", 13,
                                "mesh_topology"));
@@ -384,6 +389,10 @@ void generate_testfile(const bool valid)
   count = 54;
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsFaceYId, &start, &count,
                            Mesh2d_full_levels_face_y_data));
+
+  float FullLevelsData[] = {0.0, 1.0};
+  count = 2;
+  ncErrorMacro(nc_put_vara(ncId, FullLevelsId, &start, &count, FullLevelsData));
 
   // Test variables
 
