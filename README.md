@@ -25,10 +25,8 @@ make
 
 To run the built-in tests, add the flag ```-DBUILD_TESTING=ON``` in CMake, rebuild the code with ```make```, and type command
 ```
-make test
+ctest
 ```
-
-Note: Some of the tests require sample netCDF files that are not currently included and will thus fail.
 
 ## Using the reader
 
@@ -37,6 +35,10 @@ The reader is a "server side" plugin, so it needs to be accessed by the ParaView
 Click on "Load Selected" after selecting the reader plugin, if it is not already loaded. You can also tick the "Auto Load" checkbox in the plugin details section, so that the reader will be automatically available next time you launch ParaView.
 
 ParaView should now allow you to choose the LFRic netCDF file reader when you open a netCDF file.
+
+## Python scripting
+
+The LFRic reader can easily by used in Python scripts like any other ParaView reader. An example is included in this repository.
 
 ## Debugging the reader
 
