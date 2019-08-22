@@ -33,6 +33,16 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
 {
   netCDFLFRicFile ncFile("testdata_valid.nc");
 
+  SECTION( "HasDim With Valid Dim Works" )
+  {
+    REQUIRE( ncFile.HasDim("Two") == true );
+  }
+
+  SECTION( "HasDim With Invalid Dim Works" )
+  {
+    REQUIRE( ncFile.HasDim("TwoTwo") == false );
+  }
+
   SECTION( "GetDimLen Works" )
   {
     REQUIRE( ncFile.GetDimLen("Two") == 2 );
@@ -93,10 +103,26 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
     REQUIRE( result[0] == "Mesh2d_full_levels" );
   }
 
+}
+
+// ------------------------------------------------------------------------------------------
+
+TEST_CASE( "NetCDF Data Tests", "[data]" )
+{
+  netCDFLFRicFile ncFile("testdata_valid.nc");
+
   SECTION( "GetVarDouble Returns Correct Result" )
   {
     std::vector<double> result = ncFile.GetVarDouble("var1", {0,0}, {1,1});
     REQUIRE( result[0] == Approx(1.0) );
+  }
+
+  SECTION( "GetVarDouble Returns NaN With Incorrect Number Of Dimensions" )
+  {
+    std::vector<double> result = ncFile.GetVarDouble("var1", {0}, {1});
+    REQUIRE( std::isnan(result[0]) == true );
+    result = ncFile.GetVarDouble("var1", {0,0,0}, {1,1,1});
+    REQUIRE( std::isnan(result[0]) == true );
   }
 
   SECTION( "GetVarLongLong Returns Correct Result" )
@@ -105,5 +131,15 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
       ncFile.GetVarLongLong("Mesh2d_full_levels_edge_nodes", {0,0}, {1,1});
     REQUIRE( result[0] == 1 );
   }
-  
+
+  SECTION( "GetVarLongLong Returns Zero With Incorrect Number Of Dimensions" )
+  {
+    std::vector<long long> result =
+      ncFile.GetVarLongLong("Mesh2d_full_levels_edge_nodes", {0}, {1});
+    REQUIRE( result[0] == 0 );
+    result =
+      ncFile.GetVarLongLong("Mesh2d_full_levels_edge_nodes", {0,0,0}, {1,1,1});
+    REQUIRE( result[0] == 0 );
+  }
+
 }

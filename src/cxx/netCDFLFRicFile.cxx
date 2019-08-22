@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <iterator>
+#include <limits>
 
 #define ncErrorMacro(e) if (e != NC_NOERR) {std::cerr << "NetCDF Error: " << nc_strerror(e) << "\n";}
 
@@ -47,6 +48,26 @@ bool netCDFLFRicFile::IsFileOpen()
 const char* netCDFLFRicFile::GetFileName()
 {
   return this->FileName.c_str();
+}
+
+//----------------------------------------------------------------------------
+
+bool netCDFLFRicFile::HasDim(const std::string& dimName)
+{
+  int dimId;
+  const int result = nc_inq_dimid(this->ncId, dimName.c_str(), &dimId);
+  if (result == NC_NOERR)
+  {
+    return true;
+  }
+  else if (result == NC_EBADDIM)
+  {
+    return false;
+  }
+  else
+  {
+    ncErrorMacro(result);
+  }
 }
 
 //----------------------------------------------------------------------------
@@ -159,7 +180,7 @@ bool netCDFLFRicFile::VarHasAtt(const std::string& varName, const std::string& a
   ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
 
   int attId;
-  int result = nc_inq_attid(this->ncId, varId, attName.c_str(), &attId);
+  const int result = nc_inq_attid(this->ncId, varId, attName.c_str(), &attId);
   if (result == NC_NOERR)
   {
     return true;
@@ -199,8 +220,8 @@ std::vector<std::string> netCDFLFRicFile::GetVarNames()
 
 std::vector<double> netCDFLFRicFile::GetVarDouble(
                     const std::string& varName,
-                    const std::initializer_list<size_t> start,
-                    const std::initializer_list<size_t> count)
+                    const std::vector<size_t> start,
+                    const std::vector<size_t> count)
 {
   // Find variable by name
   int varId;
@@ -216,11 +237,21 @@ std::vector<double> netCDFLFRicFile::GetVarDouble(
   std::vector<double> varData;
   varData.resize(size);
 
-  // NetCDF will automatically convert non-double numeric data into double
-  // This function will also check index ranges automatically
-  // initialiser_list.begin() should give us access to a contiguous size_t array
-  ncErrorMacro(nc_get_vara_double(this->ncId, varId, start.begin(),
-                                  count.begin(), varData.data()));
+  // Check if number of dimensions matches netCDF variable
+  int numDims;
+  ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
+  if (numDims != start.size() or numDims != count.size())
+  {
+    std::cerr << "netCDFLFRicFile::GetVarDouble: number of dimensions does not match netCDF variable.\n";
+    std::fill(varData.begin(), varData.end(), std::numeric_limits<double>::quiet_NaN());
+  }
+  else
+  {
+    // NetCDF will automatically convert non-double numeric data into double
+    // This function will also check index ranges automatically
+    ncErrorMacro(nc_get_vara_double(this->ncId, varId, start.data(),
+                                    count.data(), varData.data()));
+  }
 
   return varData;
 }
@@ -229,8 +260,8 @@ std::vector<double> netCDFLFRicFile::GetVarDouble(
 
 std::vector<long long> netCDFLFRicFile::GetVarLongLong(
                        const std::string& varName,
-                       const std::initializer_list<size_t> start,
-                       const std::initializer_list<size_t> count)
+                       const std::vector<size_t> start,
+                       const std::vector<size_t> count)
 {
   int varId;
   ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
@@ -244,9 +275,20 @@ std::vector<long long> netCDFLFRicFile::GetVarLongLong(
   std::vector<long long> varData;
   varData.resize(size);
 
-  // netCDF will automatically convert non-double numeric data into long long
-  ncErrorMacro(nc_get_vara_longlong(this->ncId, varId, start.begin(),
-                                    count.begin(), varData.data()));
+  // Check if number of dimensions matches netCDF variable
+  int numDims;
+  ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
+  if (numDims != start.size() or numDims != count.size())
+  {
+    std::cerr << "netCDFLFRicFile::GetVarLongLong: number of dimensions does not match netCDF variable.\n";
+    std::fill(varData.begin(), varData.end(), 0);
+  }
+  else
+  {
+    // netCDF will automatically convert non-double numeric data into long long
+    ncErrorMacro(nc_get_vara_longlong(this->ncId, varId, start.data(),
+                                      count.data(), varData.data()));
+  }
 
   return varData;
 }

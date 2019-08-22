@@ -23,6 +23,8 @@ public:
 
   const char* GetFileName();
 
+  bool HasDim(const std::string& dimName);
+
   size_t GetDimLen(const std::string& dimName);
 
   std::string GetVarDimName(const std::string& varName, const size_t dim);
@@ -39,12 +41,12 @@ public:
   std::vector<std::string> GetVarNames();
 
   std::vector<double> GetVarDouble(const std::string& varName,
-                                   const std::initializer_list<size_t> start,
-                                   const std::initializer_list<size_t> count);
+                                   const std::vector<size_t> start,
+                                   const std::vector<size_t> count);
 
   std::vector<long long> GetVarLongLong(const std::string& varName,
-                                        const std::initializer_list<size_t> start,
-                                        const std::initializer_list<size_t> count);
+                                        const std::vector<size_t> start,
+                                        const std::vector<size_t> count);
 
 private:
 
