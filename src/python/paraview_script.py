@@ -27,7 +27,7 @@ renderView.CameraViewUp = [0.76, 0.44, 0.49]
 # Define a colour look-up table using (data value, r, g, b) tuples
 # Use value range from first timestep
 lut = pvs.GetColorTransferFunction('pressure')
-valueRange = data.GetCellDataInformation()['pressure'].GetRange()
+valueRange = data.CellData['pressure'].GetRange()
 lut.RGBPoints = [valueRange[0], 0.23, 0.30, 0.75,
                  valueRange[1], 0.71, 0.02, 0.15]
 
