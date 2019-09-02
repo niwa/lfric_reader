@@ -94,6 +94,9 @@ private:
   std::map<std::string,bool> Fields;
   std::vector<double> TimeSteps;
   size_t NumberOfLevelsGlobal, NumberOfFaces2D, NumberOfEdges2D;
+  std::string TimeDimName, MeshName;
+  std::string VerticalDimName, VerticalAxisName;
+  mesh_types MeshType;
 
 };
 #endif
