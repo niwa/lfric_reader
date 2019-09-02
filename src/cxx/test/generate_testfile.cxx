@@ -67,15 +67,7 @@ void generate_testfile(const bool valid)
 
   // Valid file needs to have dummy variable "Mesh2d_full_levels" with UGRID metadata
   int Mesh2dFullLevelsId;
-  std::string meshVarName;
-  if (valid)
-  {
-    meshVarName = "Mesh2d_full_levels";
-  }
-  else
-  {
-    meshVarName = "SomeOtherName";
-  }
+  std::string meshVarName = "Mesh2d_full_levels";
   ncErrorMacro(nc_def_var(ncId, meshVarName.c_str(), NC_INT, 0,
                           0, &Mesh2dFullLevelsId));
 
@@ -145,10 +137,19 @@ void generate_testfile(const bool valid)
                           &FullLevelsId));
 
   // Set UGRID mesh variable attributes
-  ncErrorMacro(nc_put_att_text(ncId, Mesh2dFullLevelsId, "cf_role", 13,
-                               "mesh_topology"));
+  if (valid)
+  {
+    ncErrorMacro(nc_put_att_text(ncId, Mesh2dFullLevelsId, "cf_role", 13,
+                                 "mesh_topology"));
+  }
+  else
+  {
+    ncErrorMacro(nc_put_att_text(ncId, Mesh2dFullLevelsId, "cf_role", 14,
+                                 "something_else"));
+  }
   ncErrorMacro(nc_put_att_text(ncId, Mesh2dFullLevelsId, "long_name", 37,
                                "Topology data of 2D unstructured mesh"));
+
   const int topDimAtt[] = {2};
   ncErrorMacro(nc_put_att_int(ncId, Mesh2dFullLevelsId, "topology_dimension",
                               NC_INT, 1, topDimAtt));
@@ -238,6 +239,8 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_att_text(ncId, var1Id, "long_name", 4, "var1"));
   ncErrorMacro(nc_put_att_text(ncId, var1Id, "units", 4, "none"));
   ncErrorMacro(nc_put_att_text(ncId, var1Id, "mesh", meshVarName.size(), meshVarName.c_str()));
+  const int intAttValue = 7;
+  ncErrorMacro(nc_put_att_int(ncId, var1Id, "index", NC_INT, 1, &intAttValue));
 
   const int var2Dims[] = {levelsDimId, nMesh2dFullLevelsFaceDimId};
   int var2Id;

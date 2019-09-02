@@ -29,6 +29,8 @@ public:
 
   std::string GetVarDimName(const std::string& varName, const size_t dim);
 
+  int GetAttInt(const std::string& varName, const std::string& attName);
+
   std::string GetAttText(const std::string& varName, const std::string& attName);
 
   std::vector<std::string> GetAttTextSplit(const std::string& varName,

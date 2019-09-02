@@ -116,6 +116,19 @@ std::string netCDFLFRicFile::GetVarDimName(const std::string& varName,
 
 //----------------------------------------------------------------------------
 
+int netCDFLFRicFile::GetAttInt(const std::string& varName, const std::string& attName)
+{
+  int varId;
+  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
+
+  int attInt;
+  ncErrorMacro(nc_get_att_int(this->ncId, varId, attName.c_str(), &attInt));
+
+  return attInt;
+}
+
+//----------------------------------------------------------------------------
+
 std::string netCDFLFRicFile::GetAttText(const std::string& varName, const std::string& attName)
 {
   int varId;
@@ -150,6 +163,12 @@ std::vector<std::string> netCDFLFRicFile::GetAttTextSplit(const std::string& var
 
 bool netCDFLFRicFile::VarHasDim(const std::string& varName, const std::string& dimName)
 {
+  // If dimName does not exist, the variable won't have it...
+  if (not this->HasDim(dimName))
+  {
+    return false;
+  }
+
   int varId;
   ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
 

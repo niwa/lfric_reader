@@ -59,6 +59,11 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
     REQUIRE( ncFile.GetVarDimName("var1", 0) == "full_levels" );
   }
 
+  SECTION( "GetAttInt Returns Correct Attribute" )
+  {
+    REQUIRE( ncFile.GetAttInt("var1", "index") == 7 );
+  }
+
   SECTION( "GetAttText Returns Correct Attribute" )
   {
     REQUIRE( ncFile.GetAttText("var1", "long_name") == "var1" );
@@ -79,17 +84,24 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
     REQUIRE( ncFile.VarHasDim("var1", "nonexistentdim") == false );
   }
 
-  SECTION( "VarHasDim Returns True If Dimension Exists" )
+  SECTION( "VarHasDim Returns False If Existing Dimension Not Used" )
   {
+    REQUIRE( ncFile.HasDim("Four") == true );
+    REQUIRE( ncFile.VarHasDim("var1", "Four") == false );
+  }
+
+  SECTION( "VarHasDim Returns True If Dimension Exists And Is Used" )
+  {
+    REQUIRE( ncFile.HasDim("full_levels") == true );
     REQUIRE( ncFile.VarHasDim("var1", "full_levels") == true );
   }
 
-  SECTION( "VarHasDim Returns False If Attribute Nonexistent" )
+  SECTION( "VarHasAtt Returns False If Attribute Nonexistent" )
   {
     REQUIRE( ncFile.VarHasAtt("var1", "nonexistentatt") == false );
   }
 
-  SECTION( "VarHasDim Returns True If Attribute Exists" )
+  SECTION( "VarHasAtt Returns True If Attribute Exists" )
   {
     REQUIRE( ncFile.VarHasAtt("var1", "long_name") == true );
   }
