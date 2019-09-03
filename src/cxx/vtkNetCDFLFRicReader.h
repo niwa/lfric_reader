@@ -38,6 +38,10 @@ public:
   // Check file validity
   virtual int CanReadFile(const char* fileName);
 
+  // ParaView interface for using index as vertical coordinate
+  void SetUseIndexAsVertCoord(const int status);
+  vtkGetMacro(UseIndexAsVertCoord, int);
+
   // ParaView interface for switching coordinates
   void SetUseCartCoords(const int status);
   vtkGetMacro(UseCartCoords, int);
@@ -89,7 +93,7 @@ private:
   void operator=(const vtkNetCDFLFRicReader&) = delete;
 
   char* FileName;
-  int UseCartCoords;
+  int UseCartCoords, UseIndexAsVertCoord;
   double VerticalScale, VerticalBias;
   std::map<std::string,bool> Fields;
   std::vector<double> TimeSteps;

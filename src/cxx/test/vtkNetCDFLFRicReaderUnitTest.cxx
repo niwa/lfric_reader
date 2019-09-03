@@ -16,6 +16,18 @@ TEST_CASE( "Basic Class Tests", "[basic]" )
     REQUIRE( result == "my_testname" );
   }
 
+  SECTION( "SetUseIndexAsVertCoord/GetUseIndexAsVertCoord Methods" )
+  {
+    // This parameter defaults to 0, so start with 1
+    reader->SetUseIndexAsVertCoord(1);
+    int result = reader->GetUseIndexAsVertCoord();
+    REQUIRE( result == 1 );
+
+    reader->SetUseIndexAsVertCoord(0);
+    result = reader->GetUseIndexAsVertCoord();
+    REQUIRE( result == 0 );
+  }
+
   SECTION( "SetUseCartCoords/GetUseCartCoords Methods" )
   {
     // This parameter defaults to 0, so start with 1

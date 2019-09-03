@@ -29,6 +29,17 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty name="UseIndexAsVerticalCoordinate"
+                         label="Use index as vertical coordinate"
+                         command="SetUseIndexAsVertCoord"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          Use level index as vertical coordinate instead of actual height coordinates.
+        </Documentation>
+      </IntVectorProperty>
+
       <IntVectorProperty name="UseCartesianCoordinates"
                          label="Use Cartesian coordinates"
                          command="SetUseCartCoords"

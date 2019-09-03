@@ -31,6 +31,7 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->SetNumberOfOutputPorts(1);
   this->FileName = nullptr;
   this->UseCartCoords = 0;
+  this->UseIndexAsVertCoord = 0;
   this->VerticalScale = 1.0;
   this->VerticalBias = 1.0;
   this->Fields.clear();
@@ -249,7 +250,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
     vtkDebugMacro("Only single time step available" << endl);
   }
 
-  // Determine vertical axis - hard-coded for the moment, as it is not
+  // Determine vertical dimension - hard-coded for the moment, as it is not
   // immediately clear which axis to use if there is more than one
   // and how the axis relates to the original 3D grid
   this->VerticalDimName = inputFile.GetVarDimName(this->VerticalAxisName, 0);
@@ -619,8 +620,8 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
       {
         face_nodes[idx] -= static_cast<long long>(startIndex);
       }
+      vtkDebugMacro("Corrected face-node connectivity for startIndex=" << startIndex << endl);
     }
-    vtkDebugMacro("Corrected face-node connectivity for startIndex=" << startIndex << endl);
   }
 
   //
@@ -644,19 +645,45 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   //
 
   std::vector<double> levels;
-  if (this->MeshType == full_level_face)
+  if (this->UseIndexAsVertCoord)
   {
-    levels = inputFile.GetVarDouble(this->VerticalAxisName,
-                                    {startLevel}, {numLevels+1});
-  }
-  else
-  {
-    // Set level heights to level index by default
+    // Use level indices
     levels.resize(numLevels+1);
     for (size_t idx = 0; idx < (numLevels+1); idx++)
     {
       levels[idx] = static_cast<double>(startLevel + idx);
     }
+  }
+  else if (this->MeshType == full_level_face)
+  {
+    // Load vertex heights from file
+    levels = inputFile.GetVarDouble(this->VerticalAxisName,
+                                    {startLevel}, {numLevels+1});
+  }
+  else if (this->MeshType == half_level_face)
+  {
+    std::vector<double> halfLevels = inputFile.GetVarDouble(this->VerticalAxisName,
+                                     {0}, {this->NumberOfLevelsGlobal});
+
+    // Extrapolate half-level heights at both ends
+    const double firstLevel = 2.0*halfLevels[0]-halfLevels[1];
+    halfLevels.insert(halfLevels.begin(),firstLevel);
+
+    const double lastLevel = 2.0*halfLevels[this->NumberOfLevelsGlobal-1] -
+                                 halfLevels[this->NumberOfLevelsGlobal-2];
+    halfLevels.push_back(lastLevel);
+
+    // Vertices are in the middle between half-level heights
+    levels.resize(numLevels+1);
+    for (size_t idx = 0; idx < (numLevels+1); idx++)
+    {
+      levels[idx] = 0.5*(halfLevels[startLevel+idx]+halfLevels[startLevel+idx+1]);
+    }
+  }
+  else
+  {
+    vtkErrorMacro("Cannot determine vertical vertex heights." << endl);
+    return 0;
   }
 
   //
@@ -1027,10 +1054,18 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
 
 //----------------------------------------------------------------------------
 
+void vtkNetCDFLFRicReader::SetUseIndexAsVertCoord(const int status)
+{
+  this->UseIndexAsVertCoord = status;
+  // Notify pipeline
+  this->Modified();
+}
+
+//----------------------------------------------------------------------------
+
 void vtkNetCDFLFRicReader::SetUseCartCoords(const int status)
 {
   this->UseCartCoords = status;
-  // Notify pipeline
   this->Modified();
 }
 
