@@ -1,6 +1,5 @@
 #include "Catch2/catch.hpp"
 #include "vtkNetCDFLFRicReader.h"
-#include "vtkCellTypes.h"
 
 // ------------------------------------------------------------------------------------------
 
@@ -232,32 +231,6 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
       const int result = reader->GetCellArrayStatus(arrayname);
       REQUIRE( result == 0 );
     }
-  }
-
-  reader->Delete();
-
-}
-
-// ------------------------------------------------------------------------------------------
-
-TEST_CASE( "UnstructedGrid Properties", "[vtk_interface]" )
-{
-
-  vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
-  reader->Update();
-  vtkUnstructuredGrid * grid = reader->GetOutput();
-
-  SECTION( "GetNumberOfCells Returns Correct Number" )
-  {
-    // Test grid has 3x3x6 cells
-    REQUIRE( grid->GetNumberOfCells() == 54 );
-  }
-
-  SECTION( "Grid Only Contais VTK_HEXAHEDRON Cells")
-  {
-    REQUIRE( grid->IsHomogeneous() == 1 );
-    REQUIRE( grid->GetCellType(0) == VTK_HEXAHEDRON );
   }
 
   reader->Delete();

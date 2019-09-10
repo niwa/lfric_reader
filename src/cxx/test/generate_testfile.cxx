@@ -393,7 +393,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsFaceYId, &start, &count,
                            Mesh2d_full_levels_face_y_data));
 
-  float FullLevelsData[] = {0.0, 1.0};
+  float FullLevelsData[] = {0.0, 0.5};
   count = 2;
   ncErrorMacro(nc_put_vara(ncId, FullLevelsId, &start, &count, FullLevelsData));
 
