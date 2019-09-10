@@ -55,7 +55,7 @@ void generate_testfile(const bool valid)
   int timeCounterDimId;
   ncErrorMacro(nc_def_dim(ncId, "time_counter", timeCounterLen, &timeCounterDimId));
 
-  const size_t levelsLen = 2;
+  const size_t levelsLen = 4;
   int levelsDimId;
   ncErrorMacro(nc_def_dim(ncId, "full_levels", levelsLen, &levelsDimId));
 
@@ -393,8 +393,8 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsFaceYId, &start, &count,
                            Mesh2d_full_levels_face_y_data));
 
-  float FullLevelsData[] = {0.0, 0.5};
-  count = 2;
+  float FullLevelsData[] = {0.0, 0.5, 1.0, 1.5};
+  count = 4;
   ncErrorMacro(nc_put_vara(ncId, FullLevelsId, &start, &count, FullLevelsData));
 
   // Test variables

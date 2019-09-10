@@ -3,6 +3,7 @@
 #include "vtkCellTypes.h"
 #include "vtkCellData.h"
 #include "vtkPointData.h"
+#include "vtkXMLPUnstructuredGridWriter.h"
 
 // ------------------------------------------------------------------------------------------
 
@@ -17,20 +18,20 @@ TEST_CASE( "UnstructuredGrid Properties", "[regression]" )
   SECTION( "GetNumberOfPoints Returns Correct Numbers" )
   {
     // Points are replicated for periodic grid
-    REQUIRE( grid->GetNumberOfPoints() == 128 );
+    REQUIRE( grid->GetNumberOfPoints() == 256 );
     reader->SetUseCartCoords(1);
     reader->Update();
-    REQUIRE( grid->GetNumberOfPoints() == 112 );
+    REQUIRE( grid->GetNumberOfPoints() == 224 );
   }
 
   SECTION( "GetNumberOfCells Returns Correct Number" )
   {
     // Test grid has 3x3x6 cells, must be the same
     // in lon-lat-rad and xyz
-    REQUIRE( grid->GetNumberOfCells() == 54 );
+    REQUIRE( grid->GetNumberOfCells() == 162 );
     reader->SetUseCartCoords(1);
     reader->Update();
-    REQUIRE( grid->GetNumberOfCells() == 54 );
+    REQUIRE( grid->GetNumberOfCells() == 162 );
   }
 
   SECTION( "Lon-Lat-Rad Grid Only Contains VTK_HEXAHEDRON Cells")
@@ -68,17 +69,22 @@ TEST_CASE( "UnstructuredGrid Properties", "[regression]" )
     REQUIRE( gridBounds[5] == Approx(-gridBounds[4]) );
   }
 
-  SECTION ("Using Index As Vertical Coordinate Works")
+  SECTION ("Vertical Bounds Are Correct")
   {
     double gridBounds[6];
     grid->GetBounds(gridBounds);
     REQUIRE( gridBounds[4] == Approx(1.0) );
-    REQUIRE( gridBounds[5] == Approx(1.5) );
+    REQUIRE( gridBounds[5] == Approx(2.5) );
+  }
+
+  SECTION ("Using Index As Vertical Coordinate Works")
+  {
+    double gridBounds[6];
     reader->SetUseIndexAsVertCoord(1);
     reader->Update();
     grid->GetBounds(gridBounds);
     REQUIRE( gridBounds[4] == Approx(1.0) );
-    REQUIRE( gridBounds[5] == Approx(2.0) );
+    REQUIRE( gridBounds[5] == Approx(4.0) );
   }
 
   SECTION ("Setting Vertical Bias Works")
@@ -90,19 +96,19 @@ TEST_CASE( "UnstructuredGrid Properties", "[regression]" )
     double gridBounds[6];
     grid->GetBounds(gridBounds);
     REQUIRE( gridBounds[4] == Approx(verticalBias) );
-    REQUIRE( gridBounds[5] == Approx(verticalBias+1.0) );
+    REQUIRE( gridBounds[5] == Approx(verticalBias+3.0) );
   }
 
   SECTION ("Setting Vertical Scale Works")
   {
-    const double verticalScale = 3.7;
+    const double verticalScale = 9.17;
     reader->SetUseIndexAsVertCoord(1);
     reader->SetVerticalScale(verticalScale);
     reader->Update();
     double gridBounds[6];
     grid->GetBounds(gridBounds);
     REQUIRE( gridBounds[4] == Approx(verticalScale) );
-    REQUIRE( gridBounds[5] == Approx(2.0*verticalScale) );
+    REQUIRE( gridBounds[5] == Approx(4.0*verticalScale) );
   }
 
   reader->Delete();
@@ -165,24 +171,84 @@ TEST_CASE( "Grid Partitioning", "[regression]" )
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
   reader->SetFileName("testdata_valid.nc");
+  reader->SetUseIndexAsVertCoord(1);
   reader->Update();
-  vtkUnstructuredGrid * grid = reader->GetOutput();
 
-  SECTION( "Single Piece Is Produced By Default" )
+  // Use writer class to request pieces (partitions) from reader
+  vtkXMLPUnstructuredGridWriter * writer = vtkXMLPUnstructuredGridWriter::New();
+  writer->SetInputConnection(reader->GetOutputPort());
+  writer->SetFileName("testoutput.pvtu");
+
+  SECTION( "Single Piece Request Works" )
   {
-    REQUIRE( grid->GetNumberOfPieces() == 1 );
+    writer->SetNumberOfPieces(1);
+    writer->SetStartPiece(0);
+    writer->SetEndPiece(0);
+    writer->Update();
+    REQUIRE( reader->GetOutput()->GetNumberOfPieces() == 1 );
   }
 
   SECTION( "No Ghost Cells Are Produced By Default" )
   {
-    REQUIRE( grid->HasAnyGhostCells() == 0 );
+    writer->SetNumberOfPieces(1);
+    writer->SetStartPiece(0);
+    writer->SetEndPiece(0);
+    writer->Update();
+    REQUIRE( reader->GetOutput()->HasAnyGhostCells() == 0 );
   }
 
   SECTION( "No Ghost Points Are Produced By Default" )
   {
-    REQUIRE( grid->HasAnyGhostPoints() == 0 );
+    writer->SetNumberOfPieces(1);
+    writer->SetStartPiece(0);
+    writer->SetEndPiece(0);
+    writer->Update();
+    REQUIRE( reader->GetOutput()->HasAnyGhostPoints() == 0 );
   }
 
+  SECTION( "Bottom Piece Has Single Ghost Level" )
+  {
+    writer->SetNumberOfPieces(3);
+    writer->SetStartPiece(0);
+    writer->SetEndPiece(0);
+    writer->SetGhostLevel(1);
+    writer->Update();
+    REQUIRE( reader->GetOutput()->GetGhostLevel() == 1 );
+    double gridBounds[6];
+    reader->GetOutput()->GetBounds(gridBounds);
+    REQUIRE( gridBounds[4] == Approx(1.0) );
+    REQUIRE( gridBounds[5] == Approx(3.0) );
+  }
+
+  SECTION( "Middle Piece Has Two Ghost Levels" )
+  {
+    writer->SetNumberOfPieces(3);
+    writer->SetStartPiece(1);
+    writer->SetEndPiece(1);
+    writer->SetGhostLevel(1);
+    writer->Update();
+    REQUIRE( reader->GetOutput()->GetGhostLevel() == 1 );
+    double gridBounds[6];
+    reader->GetOutput()->GetBounds(gridBounds);
+    REQUIRE( gridBounds[4] == Approx(1.0) );
+    REQUIRE( gridBounds[5] == Approx(4.0) );
+  }
+
+  SECTION( "Top Piece Has Single Ghost Level" )
+  {
+    writer->SetNumberOfPieces(3);
+    writer->SetStartPiece(2);
+    writer->SetEndPiece(2);
+    writer->SetGhostLevel(1);
+    writer->Update();
+    REQUIRE( reader->GetOutput()->GetGhostLevel() == 1 );
+    double gridBounds[6];
+    reader->GetOutput()->GetBounds(gridBounds);
+    REQUIRE( gridBounds[4] == Approx(2.0) );
+    REQUIRE( gridBounds[5] == Approx(4.0) );
+  }
+
+  writer->Delete();
   reader->Delete();
 
 }
