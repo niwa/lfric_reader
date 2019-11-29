@@ -83,6 +83,20 @@ size_t netCDFLFRicFile::GetDimLen(const std::string& dimName)
 
 //----------------------------------------------------------------------------
 
+size_t netCDFLFRicFile::GetVarNumDims(const std::string& varName)
+{
+  int varId;
+  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
+
+  int numDims;
+  ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
+
+  // We rely on netCDF and assume that numDims >= 0
+  return static_cast<size_t>(numDims);
+}
+
+//----------------------------------------------------------------------------
+
 std::string netCDFLFRicFile::GetVarDimName(const std::string& varName,
                                            const size_t dim)
 {
@@ -157,6 +171,26 @@ std::vector<std::string> netCDFLFRicFile::GetAttTextSplit(const std::string& var
   std::vector<std::string> textSplit(std::istream_iterator<std::string>{attStream},
                                      std::istream_iterator<std::string>());
   return textSplit;
+}
+
+//----------------------------------------------------------------------------
+
+bool netCDFLFRicFile::HasVar(const std::string& varName)
+{
+  int varId;
+  const int result = nc_inq_varid(this->ncId, varName.c_str(), &varId);
+  if (result == NC_NOERR)
+  {
+    return true;
+  }
+  else if (result == NC_ENOTVAR)
+  {
+    return false;
+  }
+  else
+  {
+    ncErrorMacro(result);
+  }
 }
 
 //----------------------------------------------------------------------------

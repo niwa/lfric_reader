@@ -148,6 +148,10 @@ int vtkNetCDFLFRicReader::RequestInformation(
     return 0;
   }
 
+  //
+  // Look for mesh description, time variable, and data fields
+  //
+
   // Get variable names and populate "Fields" map, ignoring UGRID mesh definitions
   // Also try and find variable with time step times
   std::string timeVarName;
@@ -171,9 +175,14 @@ int vtkNetCDFLFRicReader::RequestInformation(
     }
 
     // There is no attribute that uniquely identifies fields, so
-    // check this combination of attributes exists
-    bool hasFieldAtts = inputFile.VarHasAtt(varName, "long_name") and
+    // check if this combination of attributes exists
+    bool hasFieldAtts = (inputFile.VarHasAtt(varName, "standard_name") or
+			 inputFile.VarHasAtt(varName, "long_name")) and
                         inputFile.VarHasAtt(varName, "mesh");
+
+    // At the moment, variables can have up to 3 dimensions (time, vertical dimension,
+    // and horizontal unstructured dimension)
+    bool hasValidNumDims = inputFile.GetVarNumDims(varName) < 4;
 
     if (hasStandardNameTime)
     {
@@ -187,8 +196,6 @@ int vtkNetCDFLFRicReader::RequestInformation(
       {
         this->MeshName = varName;
         this->MeshType = full_level_face;
-        // Assume that there is a corresponding height field
-        this->VerticalAxisName = "full_levels";
         vtkDebugMacro("=> mesh name, assuming full_level_face type mesh" << endl);
       }
       // Use first available mesh otherwise and assume it is half-level type
@@ -196,12 +203,10 @@ int vtkNetCDFLFRicReader::RequestInformation(
       {
         this->MeshName = varName;
         this->MeshType = half_level_face;
-        // Hard-coded for the moment
-        this->VerticalAxisName = "level_height";
         vtkDebugMacro("=> mesh name, assuming half_level_face type mesh" << endl);
       }
     }
-    else if (hasFieldAtts)
+    else if (hasFieldAtts and hasValidNumDims)
     {
       // If field is not in list, insert and default to "don't load"
       std::map<std::string,bool>::const_iterator it = this->Fields.find(varName);
@@ -213,6 +218,10 @@ int vtkNetCDFLFRicReader::RequestInformation(
     }
   }
   vtkDebugMacro("Number of data arrays found=" << this->Fields.size() << endl);
+
+  //
+  // Look for timesteps
+  //
 
   // Look for time dimension, assuming that it is first dim of time variable
   size_t NumberOfTimeSteps = 0;
@@ -250,16 +259,40 @@ int vtkNetCDFLFRicReader::RequestInformation(
     vtkDebugMacro("Only single time step available" << endl);
   }
 
-  // Determine vertical dimension - hard-coded for the moment, as it is not
-  // immediately clear which axis to use if there is more than one
-  // and how the axis relates to the original 3D grid
-  this->VerticalDimName = inputFile.GetVarDimName(this->VerticalAxisName, 0);
-  this->NumberOfLevelsGlobal = inputFile.GetDimLen(this->VerticalDimName);
-  // NumberOfLevelsGlobal stores the number of cells, "full_levels" are interfaces
-  if (this->VerticalAxisName == "full_levels")
+  //
+  // Determine vertical dimension
+  //
+
+  // Names are hard-coded at the moment
+  // LFRic output case - assume that "full_levels" mesh always exists
+  if (this->MeshType == full_level_face and inputFile.HasVar("full_levels"))
   {
-    this->NumberOfLevelsGlobal -= 1;
+    this->VerticalAxisName = "full_levels";
+    this->VerticalDimName = inputFile.GetVarDimName(this->VerticalAxisName, 0);
+    // NumberOfLevelsGlobal stores the number of cells while "full_levels" are interfaces
+    // between cells
+    this->NumberOfLevelsGlobal = inputFile.GetDimLen(this->VerticalDimName) - 1;
+    vtkDebugMacro("Using full_levels as vertical axis with dim name" <<
+                  this->VerticalDimName << endl);
   }
+  // UGRID case - assume that "level_height" exists
+  else if (this->MeshType == half_level_face and inputFile.HasVar("level_height"))
+  {
+    this->VerticalAxisName = "level_height";
+    this->VerticalDimName = inputFile.GetVarDimName(this->VerticalAxisName, 0);
+    this->NumberOfLevelsGlobal = inputFile.GetDimLen(this->VerticalDimName);
+    vtkDebugMacro("Using level_height as vertical axis with dim name" <<
+                  this->VerticalDimName << endl);
+  }
+  // UGRID case - assume a 2D mesh
+  else
+  {
+    this->VerticalAxisName.clear();
+    this->VerticalDimName.clear();
+    this->NumberOfLevelsGlobal = 1;
+    vtkDebugMacro("Assuming 2D mesh without vertical axis" << endl);
+  }
+
   vtkDebugMacro("NumberOfLevelsGlobal (max number of pieces)=" <<
                 this->NumberOfLevelsGlobal << endl);
 
@@ -645,7 +678,8 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   //
 
   std::vector<double> levels;
-  if (this->UseIndexAsVertCoord)
+  // Treat 2D case as a single 3D layer
+  if (this->UseIndexAsVertCoord or this->NumberOfLevelsGlobal == 1)
   {
     // Use level indices
     levels.resize(numLevels+1);
@@ -871,9 +905,16 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
       // Add time dimension to slice arrays if it exists
       if (inputFile.VarHasDim(varName, this->TimeDimName))
       {
-        start.push_back(timestep);
-        count.push_back(1);
-        vtkDebugMacro("Found time dimension" << endl);
+        if (inputFile.GetVarDimName(varName, 0) == this->TimeDimName)
+	{
+          start.push_back(timestep);
+          count.push_back(1);
+          vtkDebugMacro("Found time dimension" << endl);
+        }
+        else
+	{
+          vtkWarningMacro("Time dimension must be first. Skipping this variable..." << endl);
+        }
       }
       else
       {

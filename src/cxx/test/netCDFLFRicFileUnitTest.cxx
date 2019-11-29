@@ -48,6 +48,11 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
     REQUIRE( ncFile.GetDimLen("Two") == 2 );
   }
 
+  SECTION( "GetVarNumDims Works" )
+  {
+    REQUIRE( ncFile.GetVarNumDims("var1") == 2 );
+  }
+
   SECTION( "GetVarDimName With Out Of Range Dim Index" )
   {
     REQUIRE( ncFile.GetVarDimName("var1", -1) == "" );
@@ -77,6 +82,16 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
     REQUIRE( result.size() == 2 );
     REQUIRE( result[0] == "Mesh2d_full_levels_node_x" );
     REQUIRE( result[1] == "Mesh2d_full_levels_node_y" );
+  }
+
+  SECTION( "HasVar With Valid Var Works" )
+  {
+    REQUIRE( ncFile.HasVar("var1") == true );
+  }
+
+  SECTION( "HasVar With Invalid Var Works" )
+  {
+    REQUIRE( ncFile.HasVar("notavalidvar") == false );
   }
 
   SECTION( "VarHasDim Returns False If Dimension Nonexistent" )

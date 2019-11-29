@@ -27,6 +27,8 @@ public:
 
   size_t GetDimLen(const std::string& dimName);
 
+  size_t GetVarNumDims(const std::string& varName);
+
   std::string GetVarDimName(const std::string& varName, const size_t dim);
 
   int GetAttInt(const std::string& varName, const std::string& attName);
@@ -35,6 +37,8 @@ public:
 
   std::vector<std::string> GetAttTextSplit(const std::string& varName,
                                            const std::string& attName);
+
+  bool HasVar(const std::string& varName);
 
   bool VarHasDim(const std::string& varName, const std::string& dimName);
 
