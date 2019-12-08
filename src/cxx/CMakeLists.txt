@@ -26,7 +26,7 @@ ADD_PARAVIEW_PLUGIN(
     netCDFLFRicReader "1.0"
     SERVER_MANAGER_XML netCDFLFRicReader.xml
     SERVER_MANAGER_SOURCES vtkNetCDFLFRicReader.cxx
-    SOURCES netCDFLFRicFile.cxx
+    SOURCES netCDFLFRicFile.cxx netCDFLFRicReaderUtils.cxx
     REQUIRED_ON_SERVER)
 
 if(BUILD_TESTING)

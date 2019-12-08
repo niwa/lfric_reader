@@ -48,11 +48,13 @@ TEST_CASE( "UnstructuredGrid Properties", "[regression]" )
     REQUIRE( grid->GetCellType(0) == VTK_HEXAHEDRON );
   }
 
-  SECTION ("Horizontal Lon-Lat-Rad Bounds Are Symmetric")
+  SECTION ("Horizontal Lon-Lat-Rad Bounds Are Correct")
   {
     double gridBounds[6];
     grid->GetBounds(gridBounds);
-    REQUIRE( gridBounds[1] == Approx(-gridBounds[0]) );
+    // Longitude bounds should add up to 360 degrees
+    REQUIRE( (gridBounds[0] + gridBounds[1]) == Approx(360.0) );
+    // Latitude bounds are symmetric
     REQUIRE( gridBounds[3] == Approx(-gridBounds[2]) );
     // Vertical bounds must not be symmetric
     REQUIRE( gridBounds[5] != Approx(-gridBounds[4]) );
