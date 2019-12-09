@@ -3,24 +3,13 @@
 #include <unordered_map>
 #include <algorithm>
 
-#ifdef DEBUG
-#include <iostream>
-#define debugOutput(x) std::cerr << x
-#else
-#define debugOutput(x)
-#endif
-
-#ifndef endl
-#define endl "\n"
-#endif
-
 void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
                          std::vector<double> & nodeCoordsY,
                          std::vector<long long> & faceNodeConnectivity,
                          const size_t numFaces,
                          const size_t numVertsPerFace)
 {
-  debugOutput("Entering resolvePeriodicGrid..." << endl);
+  vtkDebugMacro("Entering resolvePeriodicGrid..." << endl);
 
   //
   // Detect grid type
@@ -42,14 +31,14 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
   {
     xOffset = 180.0;
     yOffset = 0.0;
-    debugOutput("Detected cubed-sphere grid, setting xOffset=" <<
+    vtkDebugMacro("Detected cubed-sphere grid, setting xOffset=" <<
                   xOffset << " yOffset=" << yOffset << endl);
   }
   else
   {
     xOffset = 0.5*(xMin + xMax);
     yOffset = 0.5*(yMin + yMax);
-    debugOutput("Detected grid other than cubed-sphere, setting xOffset=" <<
+    vtkDebugMacro("Detected grid other than cubed-sphere, setting xOffset=" <<
                   xOffset << " yOffset=" << yOffset << endl);
   }
 
@@ -163,9 +152,9 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
     }
   }
  
-  debugOutput("mirrorNodesX: " << mirrorNodesX.size() << endl);
-  debugOutput("mirrorNodesY: " << mirrorNodesY.size() << endl);
-  debugOutput("mirrorNodesXY: " << mirrorNodesXY.size() << endl);
+  vtkDebugMacro("mirrorNodesX: " << mirrorNodesX.size() << endl);
+  vtkDebugMacro("mirrorNodesY: " << mirrorNodesY.size() << endl);
+  vtkDebugMacro("mirrorNodesXY: " << mirrorNodesXY.size() << endl);
 
-  debugOutput("Finished resolvePeriodicGrid" << endl);
+  vtkDebugMacro("Finished resolvePeriodicGrid" << endl);
 }

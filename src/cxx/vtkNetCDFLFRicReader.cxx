@@ -3,13 +3,14 @@
 
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
-#include <vtkNew.h>
 #include <vtkStreamingDemandDrivenPipeline.h>
 #include <vtkCellType.h>
 #include <vtkDoubleArray.h>
+#include <vtkArrayDispatch.h>
 #include <vtkCellData.h>
-#include <vtkMath.h>
+#include <vtkCellArray.h>
 #include <vtkUnsignedCharArray.h>
+#include <vtkDataSetAttributes.h>
 
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkNetCDFLFRicReader)
@@ -597,6 +598,12 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
     return 0;
   }
 
+  // Apply scale and bias
+  for (size_t iLevel = 0; iLevel < levels.size(); iLevel++)
+  {
+    levels[iLevel] = this->VerticalScale*(levels[iLevel] + this->VerticalBias);
+  }
+
   this->UpdateProgress(0.25);
 
   //
@@ -605,6 +612,8 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   if (!this->UseCartCoords)
   {
+    vtkDebugMacro("Resolving grid periodicity..." << endl);
+
     resolvePeriodicGrid(node_coords_x, node_coords_y, face_nodes,
                         this->NumberOfFaces2D, nverts_per_face);
     // Reset nnodes to new count
@@ -620,39 +629,19 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   vtkDebugMacro("Setting VTK points..." << endl);
 
   vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
-  if (this->UseCartCoords)
-  {
-    const double deg2rad = vtkMath::Pi()/180.0;
-    for (size_t ilevel = 0; ilevel < (numLevels+1); ilevel++)
-    {
-      for (size_t inode = 0; inode < nnodes; inode++)
-      {
-        const double coords[3] = {node_coords_x[inode],
-                                  node_coords_y[inode],
-                                  this->VerticalScale*(levels[ilevel] + this->VerticalBias)};
+  points->SetNumberOfPoints(nnodes*(numLevels+1));
+  vtkDataArray * pointLocs = points->GetData();
 
-        // Convert from lon-lat-rad to Cartesian coordinates
-        const double xyz[3] = {coords[2]*cos(coords[0]*deg2rad)*cos(coords[1]*deg2rad),
-                               coords[2]*sin(coords[0]*deg2rad)*cos(coords[1]*deg2rad),
-                               coords[2]*sin(coords[1]*deg2rad)};
-
-        points->InsertNextPoint(xyz);
-      }
-    }
-  }
-  else
+  // Use vtkArrayDispatch mechanism to fill vtkDataArray directly, this is
+  // a lot faster than using Insert or Set methods
+  SetPointLocationWorker pointsWorker(node_coords_x, node_coords_y, levels,
+                                      this->UseCartCoords);
+  typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Reals> pointsDispatcher;
+  if (!pointsDispatcher::Execute(pointLocs, pointsWorker))
   {
-    for (size_t ilevel = 0; ilevel < (numLevels+1); ilevel++)
-    {
-      for (size_t inode = 0; inode < nnodes; inode++)
-      {
-        const double coords[3] = {node_coords_x[inode],
-                                  node_coords_y[inode],
-                                  this->VerticalScale*(levels[ilevel] + this->VerticalBias)};
-        points->InsertNextPoint(coords);
-      }
-    }
+    pointsWorker(pointLocs);
   }
+
   grid->SetPoints(points);
 
   this->UpdateProgress(0.75);
@@ -663,24 +652,20 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   vtkDebugMacro("Setting VTK cells..." << endl);
 
-  // Build up grid cells for this piece vertical layer-wise
-  grid->Allocate(static_cast<vtkIdType>(this->NumberOfFaces2D*numLevels));
+  vtkSmartPointer<vtkCellArray> cells = vtkSmartPointer<vtkCellArray>::New();
+  cells->SetNumberOfCells(numLevels*this->NumberOfFaces2D);
 
-  std::vector<vtkIdType> cell_verts;
-  cell_verts.resize(2*nverts_per_face);
-  for (size_t ilevel = 0; ilevel < numLevels; ilevel++)
+  vtkDataArray * cellConnect = cells->GetData();
+  cellConnect->SetNumberOfTuples(numLevels*this->NumberOfFaces2D*(2*nverts_per_face+1));
+
+  SetConnectivityWorker connectWorker(face_nodes, numLevels, this->NumberOfFaces2D,
+                                      nverts_per_face, nnodes);
+  typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Integrals> cellsDispatcher;
+  if (!cellsDispatcher::Execute(cellConnect, connectWorker))
   {
-    for (size_t iface = 0; iface < this->NumberOfFaces2D; iface++)
-    {
-      for (size_t ivertex = 0; ivertex < nverts_per_face; ivertex++)
-      {
-        cell_verts[ivertex] = static_cast<vtkIdType>(face_nodes[iface*nverts_per_face + ivertex] + ilevel*nnodes);
-        cell_verts[ivertex+nverts_per_face] = static_cast<vtkIdType>(cell_verts[ivertex] + nnodes);
-      }
-      grid->InsertNextCell(VTK_HEXAHEDRON, static_cast<vtkIdType>(2*nverts_per_face),
-                           cell_verts.data());
-    }
+    connectWorker(cellConnect);
   }
+  grid->SetCells(VTK_HEXAHEDRON, cells);
 
   // Mark ghost cells as "duplicate cell"
   if (numGhostsAbove > 0 || numGhostsBelow > 0)
