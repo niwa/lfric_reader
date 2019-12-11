@@ -84,9 +84,6 @@ protected:
                  const size_t timestep, const size_t startLevel,
                  const size_t numLevels);
 
-  // Transforms periodic grid into non-periodic grid by replicating vertices (points)
-  void mirror_points(vtkSmartPointer<vtkUnstructuredGrid> grid);
-
 private:
 
   vtkNetCDFLFRicReader(const vtkNetCDFLFRicReader&) = delete;
@@ -97,10 +94,11 @@ private:
   double VerticalScale, VerticalBias;
   std::map<std::string,bool> Fields;
   std::vector<double> TimeSteps;
-  size_t NumberOfLevelsGlobal, NumberOfFaces2D, NumberOfEdges2D;
-  std::string TimeDimName, MeshName;
+  size_t NumberOfLevelsGlobal, NumberOfEdges2D;
+  std::string TimeDimName;
   std::string VerticalDimName, VerticalAxisName;
-  mesh_types MeshType;
+
+  UGRIDMeshDescription mesh2D;
 
 };
 #endif

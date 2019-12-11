@@ -11,6 +11,44 @@
 #include <vector>
 #include <string>
 
+// The following LFRic mesh 2D types are currently supported
+enum mesh2DTypes {halfLevelFace, fullLevelFace};
+
+// Holds all metadata needed to build VTK grid
+struct UGRIDMeshDescription
+{
+  // LFRic XIOS output files require special treatment
+  bool isLFRicXIOSFile;
+
+  // Up to three topologies can exist
+  size_t numTopologies;
+
+  // Type of main mesh
+  mesh2DTypes meshType;
+
+  // Mesh dimensions
+  size_t numNodes;
+  size_t numFaces;
+  size_t numVertsPerFace;
+
+  // NetCDF dimension names
+  std::string nodeDim;
+  std::string faceDim;
+  std::string vertDim;
+
+  // NetCDF variable names
+  std::string meshTopologyVar;
+  std::string nodeCoordXVar;
+  std::string nodeCoordYVar;
+  std::string faceNodeConnVar;
+
+  // Start index for face-node connectivity
+  long long faceNodeStartIdx;
+
+  UGRIDMeshDescription() : isLFRicXIOSFile(false), numTopologies(0),
+    numNodes(0), numFaces(0), numVertsPerFace(0), faceNodeStartIdx(0) {}
+};
+
 class netCDFLFRicFile
 {
 
@@ -53,6 +91,8 @@ public:
   std::vector<long long> GetVarLongLong(const std::string& varName,
                                         const std::vector<size_t> start,
                                         const std::vector<size_t> count);
+
+  UGRIDMeshDescription GetMesh2DDescription();
 
 private:
 

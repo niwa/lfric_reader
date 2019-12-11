@@ -345,3 +345,148 @@ std::vector<long long> netCDFLFRicFile::GetVarLongLong(
 
   return varData;
 }
+
+//----------------------------------------------------------------------------
+
+UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
+{
+  UGRIDMeshDescription mesh2D = UGRIDMeshDescription();
+
+  // Look for UGRID 2D mesh description dummy variable,
+  // must have attribute cf_role=mesh_topology
+  // There can be several mesh descriptions in a file
+  mesh2D.meshTopologyVar.clear();
+  for (std::string const &varName : this->GetVarNames())
+  {
+    if (this->VarHasAtt(varName, "cf_role"))
+    {
+      if (this->GetAttText(varName, "cf_role") == "mesh_topology")
+      {
+        mesh2D.numTopologies++;
+
+        // Prefer LFRic full-level face mesh which matches VTK grids
+        // topology_dimension=2 means faces
+        if (varName == "Mesh2d_full_levels" and
+            this->GetAttInt(varName, "topology_dimension") == 2)
+	{
+          mesh2D.meshTopologyVar = varName;
+          mesh2D.meshType = fullLevelFace;
+          // Workaround for non-CF-compliant vertical axis
+          mesh2D.isLFRicXIOSFile = true;
+        }
+        // Assume that mesh is half-level type otherwise
+        else if (mesh2D.meshTopologyVar.empty() and
+                 this->GetAttInt(varName, "topology_dimension") == 2)
+        {
+          mesh2D.meshTopologyVar = varName;
+          mesh2D.meshType = halfLevelFace;
+          mesh2D.isLFRicXIOSFile = false;
+        }
+      }
+    }
+  }
+
+  // Must have at least one face mesh
+  if (mesh2D.meshTopologyVar.empty() or mesh2D.numTopologies == 0)
+  {
+    std::cerr << "GetMesh2DDescription: At least one UGRID face mesh is required.\n";
+    return UGRIDMeshDescription();
+  }
+
+  // Require that a multi-mesh file is an LFRic file - we will not be able make
+  // sense of multiple meshes otherwise
+  if (not mesh2D.isLFRicXIOSFile and mesh2D.numTopologies > 1)
+  {
+    std::cerr << "GetMesh2DDescription: Only LFRic output files can have multiple UGRID meshes.\n";
+    return UGRIDMeshDescription();
+  }
+
+  // Accept up to 3 meshes in an LFRic file
+  if (mesh2D.isLFRicXIOSFile and mesh2D.numTopologies > 3)
+  {
+    std::cerr << "GetMesh2DDescription: LFRic output files can only have up to 3 UGRID meshes.\n";
+    return UGRIDMeshDescription();
+  }
+
+  //
+  // Get node coordinate variables and their dimensions
+  //
+
+  if (not this->VarHasAtt(mesh2D.meshTopologyVar, "node_coordinates"))
+  {
+    std::cerr << "GetMesh2DDescription: UGRID topology variable must have node_coordinates attribute.\n";
+    return UGRIDMeshDescription();
+  }
+
+  std::vector<std::string> nodeCoordVarNames =
+    this->GetAttTextSplit(mesh2D.meshTopologyVar, "node_coordinates");
+
+  if (nodeCoordVarNames.size() != 2)
+  {
+    std::cerr << "GetMesh2DDescription: Expected 2 node coordinate variables but received " <<
+                  nodeCoordVarNames.size() << ".\n";
+    return UGRIDMeshDescription();
+  }
+
+  // Longitude must be the "x axis" to detect cubed-sphere grids
+  if (this->GetAttText(nodeCoordVarNames[0], "standard_name") == "latitude")
+  {
+    nodeCoordVarNames[0].swap(nodeCoordVarNames[1]);
+  }
+
+  if (this->GetAttText(nodeCoordVarNames[0], "standard_name") != "longitude" or
+      this->GetAttText(nodeCoordVarNames[1], "standard_name") != "latitude")
+  {
+    std::cerr << "GetMesh2DDescription: Node coord variables must be named latitude/longitude.\n";
+    return UGRIDMeshDescription();
+  }
+
+  mesh2D.nodeCoordXVar = nodeCoordVarNames[0];
+  mesh2D.nodeCoordYVar = nodeCoordVarNames[1];
+
+  // Get node dimension name and length
+  mesh2D.nodeDim = this->GetVarDimName(mesh2D.nodeCoordXVar, 0);
+  mesh2D.numNodes = this->GetDimLen(mesh2D.nodeDim);
+
+  //
+  // Get face-node connectivity variable and its dimensions
+  //
+
+  if (not this->VarHasAtt(mesh2D.meshTopologyVar, "face_node_connectivity"))
+  {
+    std::cerr << "GetMesh2DDescription: UGRID topology variable must have face_node_connectivity attribute.\n";
+    return UGRIDMeshDescription();
+  }
+
+  mesh2D.faceNodeConnVar = this->GetAttText(mesh2D.meshTopologyVar,
+                           "face_node_connectivity");
+
+  // Number of faces must be the first dimension, although
+  // the UGRID conventions are more lenient
+  mesh2D.faceDim = this->GetVarDimName(mesh2D.faceNodeConnVar, 0);
+
+  if (this->VarHasAtt(mesh2D.meshTopologyVar, "face_dimension"))
+  {
+    if (mesh2D.faceDim !=
+        this->GetAttText(mesh2D.meshTopologyVar, "face_dimension"))
+    {
+      std::cerr << "GetMesh2DDescription: face_node_connectivity must have face_dimension first.\n";
+      return UGRIDMeshDescription();
+    }
+  }
+
+  mesh2D.numFaces = this->GetDimLen(mesh2D.faceDim);
+
+  // Assume that number of vertices per face is the second dimension
+  mesh2D.vertDim = this->GetVarDimName(mesh2D.faceNodeConnVar, 1);
+  mesh2D.numVertsPerFace = this->GetDimLen(mesh2D.vertDim);
+
+  // Correction for non-zero start index
+  if (this->VarHasAtt(mesh2D.faceNodeConnVar, "start_index"))
+  {
+    mesh2D.faceNodeStartIdx = static_cast<long long>(
+      this->GetAttInt(mesh2D.faceNodeConnVar, "start_index"));
+  }
+
+  return mesh2D;
+}
