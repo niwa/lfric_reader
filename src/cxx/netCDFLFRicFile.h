@@ -14,7 +14,7 @@
 // The following LFRic mesh 2D types are currently supported
 enum mesh2DTypes {halfLevelFace, fullLevelFace};
 
-// Holds all metadata needed to build VTK grid
+// Holds metadata for unstructured part of VTK grid
 struct UGRIDMeshDescription
 {
   // LFRic XIOS output files require special treatment
@@ -47,6 +47,19 @@ struct UGRIDMeshDescription
 
   UGRIDMeshDescription() : isLFRicXIOSFile(false), numTopologies(0),
     numNodes(0), numFaces(0), numVertsPerFace(0), faceNodeStartIdx(0) {}
+};
+
+// Holds metadata for vertical axis in VTK grid
+struct CFVerticalAxis
+{
+  // Axis length (number of cells in the vertical)
+  size_t numLevels;
+
+  // NetCDF dimension and variable name
+  std::string axisDim;
+  std::string axisVar;
+
+  CFVerticalAxis(): numLevels(0) {}
 };
 
 class netCDFLFRicFile
@@ -93,6 +106,9 @@ public:
                                         const std::vector<size_t> count);
 
   UGRIDMeshDescription GetMesh2DDescription();
+
+  CFVerticalAxis GetZAxisDescription(const bool isLFRicXIOSFile,
+                                     const mesh2DTypes meshType);
 
 private:
 

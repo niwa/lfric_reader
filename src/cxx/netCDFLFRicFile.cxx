@@ -490,3 +490,59 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
   return mesh2D;
 }
+
+//----------------------------------------------------------------------------
+
+CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
+                                                    const mesh2DTypes meshType)
+{
+  CFVerticalAxis levels = CFVerticalAxis();
+
+  // Workaround for LFRic XIOS output files where vertical axes do not have
+  // attributes required by CF convention
+  if (isLFRicXIOSFile)
+  {
+    if (meshType == fullLevelFace and this->HasVar("full_levels"))
+    {
+      levels.axisVar = "full_levels";
+      levels.axisDim = this->GetVarDimName(levels.axisVar, 0);
+      // Need the number of cells, "full_levels" are interfaces between cells
+      levels.numLevels = this->GetDimLen(levels.axisDim) - 1;
+    }
+    else if (meshType == halfLevelFace and this->HasVar("half_levels"))
+    {
+      levels.axisVar = "half_levels";
+      levels.axisDim = this->GetVarDimName(levels.axisVar, 0);
+      levels.numLevels = this->GetDimLen(levels.axisDim);
+    }
+  }
+  // Assume that other input files are CF-compliant and use "positive" attribute
+  // Restrict choices to "level_height" and "model_level_number"
+  else
+  {
+    levels.axisVar.clear();
+    for (std::string const &varName : this->GetVarNames())
+    {
+      if (this->VarHasAtt(varName, "positive"))
+      {
+        // Prefer to use level_height variable if it exists
+	if (varName == "level_height" or
+            (levels.axisVar.empty() and varName == "model_level_number"))
+        {
+          levels.axisVar = varName;
+          levels.axisDim = this->GetVarDimName(levels.axisVar, 0);
+          levels.numLevels = this->GetDimLen(levels.axisDim);
+        }
+      }
+    }
+  }
+
+  // Assume 2D-only file and set vertical axis to single level if no axis found
+  if (levels.axisVar.empty())
+  {
+    levels.axisDim.clear();
+    levels.numLevels = 1;
+  }
+
+  return levels;
+}

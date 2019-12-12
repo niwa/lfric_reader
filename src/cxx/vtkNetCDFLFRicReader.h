@@ -94,11 +94,11 @@ private:
   double VerticalScale, VerticalBias;
   std::map<std::string,bool> Fields;
   std::vector<double> TimeSteps;
-  size_t NumberOfLevelsGlobal, NumberOfEdges2D;
+  size_t NumberOfEdges2D;
   std::string TimeDimName;
-  std::string VerticalDimName, VerticalAxisName;
 
   UGRIDMeshDescription mesh2D;
+  CFVerticalAxis zAxis;
 
 };
 #endif

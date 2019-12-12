@@ -35,11 +35,8 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->VerticalBias = 1.0;
   this->Fields.clear();
   this->TimeSteps.clear();
-  this->NumberOfLevelsGlobal = 0;
   this->NumberOfEdges2D = 0;
   this->TimeDimName.clear();
-  this->VerticalAxisName.clear();
-  this->VerticalDimName.clear();
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader constructor" << endl);
 }
@@ -53,8 +50,6 @@ vtkNetCDFLFRicReader::~vtkNetCDFLFRicReader()
   this->Fields.clear();
   this->TimeSteps.clear();
   this->TimeDimName.clear();
-  this->VerticalAxisName.clear();
-  this->VerticalDimName.clear();
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader destructor" << endl);
 }
@@ -136,12 +131,17 @@ int vtkNetCDFLFRicReader::RequestInformation(
     return 0;
   }
 
+  // Look for UGRID horizontal unstructured mesh
   this->mesh2D = inputFile.GetMesh2DDescription();
   if (mesh2D.numTopologies == 0)
   {
     vtkErrorMacro("Failed to determine 2D UGRID mesh description." << endl);
     return 0;
   }
+
+  // Look for vertical axis
+  this->zAxis = inputFile.GetZAxisDescription(this->mesh2D.isLFRicXIOSFile,
+                                              this->mesh2D.meshType);
 
   //
   // Look for time variable, and data fields
@@ -230,43 +230,6 @@ int vtkNetCDFLFRicReader::RequestInformation(
     vtkDebugMacro("Only single time step available" << endl);
   }
 
-  //
-  // Determine vertical dimension
-  //
-
-  // Names are hard-coded at the moment
-  // LFRic output case - assume that "full_levels" mesh always exists
-  if (this->mesh2D.meshType == fullLevelFace and inputFile.HasVar("full_levels"))
-  {
-    this->VerticalAxisName = "full_levels";
-    this->VerticalDimName = inputFile.GetVarDimName(this->VerticalAxisName, 0);
-    // NumberOfLevelsGlobal stores the number of cells while "full_levels" are interfaces
-    // between cells
-    this->NumberOfLevelsGlobal = inputFile.GetDimLen(this->VerticalDimName) - 1;
-    vtkDebugMacro("Using full_levels as vertical axis with dim name" <<
-                  this->VerticalDimName << endl);
-  }
-  // UGRID case - assume that "level_height" exists
-  else if (this->mesh2D.meshType == halfLevelFace and inputFile.HasVar("level_height"))
-  {
-    this->VerticalAxisName = "level_height";
-    this->VerticalDimName = inputFile.GetVarDimName(this->VerticalAxisName, 0);
-    this->NumberOfLevelsGlobal = inputFile.GetDimLen(this->VerticalDimName);
-    vtkDebugMacro("Using level_height as vertical axis with dim name" <<
-                  this->VerticalDimName << endl);
-  }
-  // UGRID case - assume a 2D mesh
-  else
-  {
-    this->VerticalAxisName.clear();
-    this->VerticalDimName.clear();
-    this->NumberOfLevelsGlobal = 1;
-    vtkDebugMacro("Assuming 2D mesh without vertical axis" << endl);
-  }
-
-  vtkDebugMacro("NumberOfLevelsGlobal (max number of pieces)=" <<
-                this->NumberOfLevelsGlobal << endl);
-
   // Reader supports pieces (partitioning) for parallel operation
   // Data is partitioned by vertical layers, so we can produce
   // only as many pieces as there are layers
@@ -327,11 +290,11 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   vtkDebugMacro("piece=" << piece << " numPieces=" << numPieces <<
                 " numGhosts=" << numGhosts << endl);
 
-  if (numPieces > this->NumberOfLevelsGlobal)
+  if (numPieces > this->zAxis.numLevels)
   {
     vtkErrorMacro("Pipeline requested " << numPieces <<
                   " pieces but reader can only provide " <<
-                  this->NumberOfLevelsGlobal << endl);
+                  this->zAxis.numLevels << endl);
     return 0;
   }
 
@@ -339,8 +302,8 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // is a non-zero remainder, add one layer to first few pieces
   // Use int here to handle potentially negative results when
   // ghost layers are added.
-  int numLevels = this->NumberOfLevelsGlobal/numPieces;
-  int remainder = this->NumberOfLevelsGlobal%numPieces;
+  int numLevels = this->zAxis.numLevels/numPieces;
+  int remainder = this->zAxis.numLevels%numPieces;
   int startLevel = numLevels*piece + remainder;
   if (piece < remainder)
   {
@@ -353,7 +316,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // We need to mark ghost cells in VTK grid, so keep track of
   // ghost levels
   int numGhostsBelow = std::min(numGhosts, startLevel);
-  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->NumberOfLevelsGlobal)-
+  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->zAxis.numLevels)-
                                 (startLevel+numLevels));
   startLevel -= numGhostsBelow;
   numLevels += numGhostsBelow + numGhostsAbove;
@@ -364,7 +327,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
 
   // Sanity checks
   size_t stopLevel = static_cast<size_t>(startLevel+numLevels);
-  if ((startLevel < 0) || (stopLevel > this->NumberOfLevelsGlobal))
+  if ((startLevel < 0) || (stopLevel > this->zAxis.numLevels))
   {
     vtkErrorMacro("Erroneous level range encountered: " << startLevel <<
                   "..." << (stopLevel-1) << endl);
@@ -474,7 +437,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   std::vector<double> levels;
   // Treat 2D case as a single 3D layer
-  if (this->UseIndexAsVertCoord or this->NumberOfLevelsGlobal == 1)
+  if (this->UseIndexAsVertCoord or this->zAxis.numLevels == 1)
   {
     // Use level indices
     levels.resize(numLevels+1);
@@ -486,20 +449,20 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   else if (this->mesh2D.meshType == fullLevelFace)
   {
     // Load vertex heights from file
-    levels = inputFile.GetVarDouble(this->VerticalAxisName,
+    levels = inputFile.GetVarDouble(this->zAxis.axisVar,
                                     {startLevel}, {numLevels+1});
   }
   else if (this->mesh2D.meshType == halfLevelFace)
   {
-    std::vector<double> halfLevels = inputFile.GetVarDouble(this->VerticalAxisName,
-                                     {0}, {this->NumberOfLevelsGlobal});
+    std::vector<double> halfLevels = inputFile.GetVarDouble(this->zAxis.axisVar,
+                                     {0}, {this->zAxis.numLevels});
 
     // Extrapolate half-level heights at both ends
     const double firstLevel = 2.0*halfLevels[0]-halfLevels[1];
     halfLevels.insert(halfLevels.begin(),firstLevel);
 
-    const double lastLevel = 2.0*halfLevels[this->NumberOfLevelsGlobal-1] -
-                                 halfLevels[this->NumberOfLevelsGlobal-2];
+    const double lastLevel = 2.0*halfLevels[this->zAxis.numLevels-1] -
+                                 halfLevels[this->zAxis.numLevels-2];
     halfLevels.push_back(lastLevel);
 
     // Vertices are in the middle between half-level heights
@@ -682,7 +645,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
       bool hasVertDim = false;
       if (inputFile.VarHasDim(varName, "half_levels") or
           inputFile.VarHasDim(varName, "full_levels") or
-          inputFile.VarHasDim(varName, this->VerticalDimName))
+          inputFile.VarHasDim(varName, this->zAxis.axisDim))
       {
         start.push_back(startLevel);
         count.push_back(numLevels);
