@@ -36,7 +36,6 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->Fields.clear();
   this->TimeSteps.clear();
   this->NumberOfEdges2D = 0;
-  this->TimeDimName.clear();
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader constructor" << endl);
 }
@@ -49,7 +48,6 @@ vtkNetCDFLFRicReader::~vtkNetCDFLFRicReader()
   this->SetFileName(nullptr);
   this->Fields.clear();
   this->TimeSteps.clear();
-  this->TimeDimName.clear();
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader destructor" << endl);
 }
@@ -143,24 +141,18 @@ int vtkNetCDFLFRicReader::RequestInformation(
   this->zAxis = inputFile.GetZAxisDescription(this->mesh2D.isLFRicXIOSFile,
                                               this->mesh2D.meshType);
 
+  // Look for time axis
+  this->tAxis = inputFile.GetTAxisDescription();
+
   //
-  // Look for time variable, and data fields
+  // Look for data fields
   //
 
-  // Get variable names and populate "Fields" map, ignoring UGRID mesh definitions
-  // Also try and find variable with time step times
-  std::string timeVarName;
-  timeVarName.clear();
+  // Get field variable names, ignoring UGRID mesh definitions
+  // and other variables
   for (std::string const &varName : inputFile.GetVarNames())
   {
     vtkDebugMacro("Request Information: Considering variable name=" << varName);
-
-    // Look for time variable
-    bool hasStandardNameTime = false;
-    if (inputFile.VarHasAtt(varName, "standard_name"))
-    {
-      hasStandardNameTime = inputFile.GetAttText(varName, "standard_name") == "time";
-    }
 
     // There is no attribute that uniquely identifies fields, so
     // check if this combination of attributes exists
@@ -172,12 +164,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
     // and horizontal unstructured dimension)
     bool hasValidNumDims = inputFile.GetVarNumDims(varName) < 4;
 
-    if (hasStandardNameTime)
-    {
-      timeVarName = varName;
-      vtkDebugMacro("=> time variable" << endl);
-    }
-    else if (hasFieldAtts and hasValidNumDims)
+    if (hasFieldAtts and hasValidNumDims)
     {
       // If field is not in list, insert and default to "don't load"
       std::map<std::string,bool>::const_iterator it = this->Fields.find(varName);
@@ -190,28 +177,14 @@ int vtkNetCDFLFRicReader::RequestInformation(
   }
   vtkDebugMacro("Number of data arrays found=" << this->Fields.size() << endl);
 
-  //
-  // Look for timesteps
-  //
-
-  // Look for time dimension, assuming that it is first dim of time variable
-  size_t NumberOfTimeSteps = 0;
-  if (!timeVarName.empty())
-  {
-    this->TimeDimName = inputFile.GetVarDimName(timeVarName, 0);
-    NumberOfTimeSteps = inputFile.GetDimLen(this->TimeDimName);
-  }
-  vtkDebugMacro("Number of time steps in file=" << NumberOfTimeSteps << endl);
-
   // Get VTK object for handing over time step information
   vtkInformation *outInfo = outputVector->GetInformationObject(0);
 
   // Read time variable if applicable, and tell the pipeline
-  this->TimeSteps.clear();
-  if (NumberOfTimeSteps > 0)
+  if (this->tAxis.numTimeSteps > 0)
   {
-    this->TimeSteps = inputFile.GetVarDouble(timeVarName, {0},
-                                             {NumberOfTimeSteps});
+    this->TimeSteps = inputFile.GetVarDouble(this->tAxis.axisVar, {0},
+                                             {this->tAxis.numTimeSteps});
 
     // Tell the pipeline which steps are available and their range
     outInfo->Set(vtkStreamingDemandDrivenPipeline::TIME_STEPS(),
@@ -621,9 +594,9 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
       count.clear();
 
       // Add time dimension to slice arrays if it exists
-      if (inputFile.VarHasDim(varName, this->TimeDimName))
+      if (inputFile.VarHasDim(varName, this->tAxis.axisDim))
       {
-        if (inputFile.GetVarDimName(varName, 0) == this->TimeDimName)
+        if (inputFile.GetVarDimName(varName, 0) == this->tAxis.axisDim)
 	{
           start.push_back(timestep);
           count.push_back(1);

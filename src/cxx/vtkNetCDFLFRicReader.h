@@ -95,10 +95,10 @@ private:
   std::map<std::string,bool> Fields;
   std::vector<double> TimeSteps;
   size_t NumberOfEdges2D;
-  std::string TimeDimName;
 
   UGRIDMeshDescription mesh2D;
   CFVerticalAxis zAxis;
+  CFTimeAxis tAxis;
 
 };
 #endif

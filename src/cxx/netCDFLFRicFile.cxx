@@ -546,3 +546,27 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
 
   return levels;
 }
+
+//----------------------------------------------------------------------------
+
+CFTimeAxis netCDFLFRicFile::GetTAxisDescription()
+{
+  CFTimeAxis time = CFTimeAxis();
+
+  // Look for variable with standard_name = time, even though this is not
+  // strictly required by CF conventions
+  for (std::string const &varName : this->GetVarNames())
+  {
+    if (this->VarHasAtt(varName, "standard_name"))
+    {
+      if (this->GetAttText(varName, "standard_name") == "time")
+      {
+        time.axisVar = varName;
+        time.axisDim = this->GetVarDimName(time.axisVar, 0);
+        time.numTimeSteps = this->GetDimLen(time.axisDim);
+      }
+    }
+  }
+
+  return time;
+}

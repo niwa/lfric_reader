@@ -62,6 +62,18 @@ struct CFVerticalAxis
   CFVerticalAxis(): numLevels(0) {}
 };
 
+// Holds metadata for time axis
+struct CFTimeAxis
+{
+  size_t numTimeSteps;
+
+  // NetCDF dimension and variable name
+  std::string axisDim;
+  std::string axisVar;
+
+  CFTimeAxis(): numTimeSteps(0) {}
+};
+
 class netCDFLFRicFile
 {
 
@@ -109,6 +121,8 @@ public:
 
   CFVerticalAxis GetZAxisDescription(const bool isLFRicXIOSFile,
                                      const mesh2DTypes meshType);
+
+  CFTimeAxis GetTAxisDescription();
 
 private:
 
