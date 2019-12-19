@@ -624,14 +624,11 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
         read_buffer = inputFile.GetVarDouble(fieldName, start, count);
       }
 
-      // Disable component dimension if not present
-      if (not fieldSpec.hasComponentDim) componentStride = read_buffer.size();
-
       // Fill remaining space with NaNs if vertical dimension not present (2D fields)
       if (not fieldSpec.hasVerticalDim)
       {
-        // Keep vertical dimension stride before resizing to 3D
-        verticalStride = read_buffer.size();
+        // Vertical dimension is outermost
+        verticalStride = numHorizontal*numComponents;
 
         if (fieldSpec.meshType == halfLevelFaceMesh)
         {
@@ -644,6 +641,10 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
                              std::numeric_limits<double>::quiet_NaN());
         }
       }
+
+      // Disable component dimension if not present by setting stride to full
+      // (possibly resized) buffer size
+      if (not fieldSpec.hasComponentDim) componentStride = read_buffer.size();
 
       vtkDebugMacro("Setting vtkDoubleArray for this field..." << endl);
 
