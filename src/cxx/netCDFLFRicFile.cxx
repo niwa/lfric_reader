@@ -7,6 +7,12 @@
 
 #define ncErrorMacro(e) if (e != NC_NOERR) {std::cerr << "NetCDF Error: " << nc_strerror(e) << "\n";}
 
+#ifdef DEBUG
+#define debugMacro(x) std::cerr << x
+#else
+#define debugMacro(x)
+#endif
+
 //----------------------------------------------------------------------------
 
 netCDFLFRicFile::netCDFLFRicFile(const char* fileName)
@@ -273,8 +279,8 @@ std::vector<std::string> netCDFLFRicFile::GetVarNames()
 
 std::vector<double> netCDFLFRicFile::GetVarDouble(
                     const std::string& varName,
-                    const std::vector<size_t> start,
-                    const std::vector<size_t> count)
+                    const std::vector<size_t>& start,
+                    const std::vector<size_t>& count)
 {
   // Find variable by name
   int varId;
@@ -313,8 +319,8 @@ std::vector<double> netCDFLFRicFile::GetVarDouble(
 
 std::vector<long long> netCDFLFRicFile::GetVarLongLong(
                        const std::string& varName,
-                       const std::vector<size_t> start,
-                       const std::vector<size_t> count)
+                       const std::vector<size_t>& start,
+                       const std::vector<size_t>& count)
 {
   int varId;
   ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
@@ -370,7 +376,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
             this->GetAttInt(varName, "topology_dimension") == 2)
 	{
           mesh2D.meshTopologyVar = varName;
-          mesh2D.meshType = fullLevelFace;
+          mesh2D.meshType = fullLevelFaceMesh;
           // Workaround for non-CF-compliant vertical axis
           mesh2D.isLFRicXIOSFile = true;
         }
@@ -379,7 +385,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
                  this->GetAttInt(varName, "topology_dimension") == 2)
         {
           mesh2D.meshTopologyVar = varName;
-          mesh2D.meshType = halfLevelFace;
+          mesh2D.meshType = halfLevelFaceMesh;
           mesh2D.isLFRicXIOSFile = false;
         }
       }
@@ -502,14 +508,14 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
   // attributes required by CF convention
   if (isLFRicXIOSFile)
   {
-    if (meshType == fullLevelFace and this->HasVar("full_levels"))
+    if (meshType == fullLevelFaceMesh and this->HasVar("full_levels"))
     {
       levels.axisVar = "full_levels";
       levels.axisDim = this->GetVarDimName(levels.axisVar, 0);
       // Need the number of cells, "full_levels" are interfaces between cells
       levels.numLevels = this->GetDimLen(levels.axisDim) - 1;
     }
-    else if (meshType == halfLevelFace and this->HasVar("half_levels"))
+    else if (meshType == halfLevelFaceMesh and this->HasVar("half_levels"))
     {
       levels.axisVar = "half_levels";
       levels.axisDim = this->GetVarDimName(levels.axisVar, 0);
@@ -569,4 +575,129 @@ CFTimeAxis netCDFLFRicFile::GetTAxisDescription()
   }
 
   return time;
+}
+
+//----------------------------------------------------------------------------
+
+void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
+                                     const std::string & fieldLoc,
+                                     const std::string & horizontalDim,
+                                     const mesh2DTypes & horizontalMeshType,
+                                     const std::string & verticalDim,
+                                     const std::string & timeDim)
+{
+  debugMacro("Entering netCDFLFRicFile::UpdateFieldMap...\n");
+
+  for (std::string const &varName : this->GetVarNames())
+  {
+    debugMacro("Considering variable " << varName << "\n");
+
+    // Require these netCDF attributes to distinguish fields from UGRID
+    // variables and other data
+    bool valid = (this->VarHasAtt(varName, "standard_name") or
+                  this->VarHasAtt(varName, "long_name")) and
+                  this->VarHasAtt(varName, "mesh") and
+                  this->VarHasAtt(varName, "coordinates") and
+                  this->VarHasAtt(varName, "location");
+
+    // Check if data is defined on the requested location (e.g., faces)
+    if (valid)
+    {
+      valid &= this->GetAttText(varName, "location") == fieldLoc;
+    }
+
+    // Identify and record variable dimensions, and add field to map
+    if (valid)
+    {
+      debugMacro("Variable has required netCDF attributes\n");
+
+      DataField fieldSpec = DataField();
+
+      const size_t numDims = this->GetVarNumDims(varName);
+      fieldSpec.dims.resize(numDims);
+
+      // Determine stride in flat data array for each dimension to
+      // flexibly recover the data in any dimension order
+      size_t stride = 1;
+
+      // Try to identify all dimensions - up to one dimension may remain
+      // unidentified and will be treated as a component dimension
+      size_t numDimsIdentified = 0;
+
+      // Work backwards to simplify computing strides
+      for (size_t iDim = numDims-1; iDim < numDims; iDim--)
+      {
+        const std::string thisDim = this->GetVarDimName(varName, iDim);
+
+        // Match dim name against expected names and record specs
+        if (thisDim == horizontalDim)
+        {
+          fieldSpec.hasHorizontalDim = true;
+          fieldSpec.meshType = horizontalMeshType;
+          fieldSpec.dims[iDim].dimType = horizontalAxisDim;
+          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDim);
+          fieldSpec.dims[iDim].dimStride = stride;
+          numDimsIdentified++;
+          debugMacro("Found horizontal dim with length " << fieldSpec.dims[iDim].dimLength <<
+                     " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
+        }
+        else if (thisDim == verticalDim)
+        {
+          fieldSpec.hasVerticalDim = true;
+          fieldSpec.dims[iDim].dimType = verticalAxisDim;
+          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDim);
+          fieldSpec.dims[iDim].dimStride = stride;
+          numDimsIdentified++;
+          debugMacro("Found vertical dim with length " << fieldSpec.dims[iDim].dimLength <<
+                     " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
+        }
+        else if (thisDim == timeDim)
+        {
+          fieldSpec.hasTimeDim = true;
+          fieldSpec.dims[iDim].dimType = timeAxisDim;
+          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDim);
+          fieldSpec.dims[iDim].dimStride = stride;
+          numDimsIdentified++;
+          debugMacro("Found time dim with length " << fieldSpec.dims[iDim].dimLength <<
+                     " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
+        }
+        // Only accept one component dimension with up to 9 components
+        else if (this->GetDimLen(thisDim) < 10 and not fieldSpec.hasComponentDim)
+        {
+          fieldSpec.hasComponentDim = true;
+          fieldSpec.dims[iDim].dimType = componentAxisDim;
+          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDim);
+          fieldSpec.dims[iDim].dimStride = stride;
+          numDimsIdentified++;
+          debugMacro("Found component dim with length " << fieldSpec.dims[iDim].dimLength <<
+                     " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
+        }
+        stride *= this->GetDimLen(thisDim);
+      }
+
+      debugMacro("Identified " << numDimsIdentified << " of " <<
+                 numDims << " dimensions\n");
+
+      // Fields must have a horizontal dimension and all dimensions must be
+      // accounted for
+      valid &= fieldSpec.hasHorizontalDim;
+      valid &= (numDimsIdentified == numDims);
+
+      if (valid)
+      {
+        // If field is not in list, insert and default to "don't load"
+        std::map<std::string, DataField>::const_iterator it = fields.find(varName);
+        if (it == fields.end())
+        {
+          debugMacro("Field is valid and is not in list, inserting...\n");
+          fields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
+        }
+      }
+      else
+      {
+        debugMacro("Ignoring field without horizontal dim or unidentified dims\n");
+      }
+    }
+  }
+  debugMacro("Finished netCDFLFRicFile::UpdateFieldMap.\n");
 }

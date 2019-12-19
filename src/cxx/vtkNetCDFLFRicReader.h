@@ -63,9 +63,6 @@ protected:
   vtkNetCDFLFRicReader();
   ~vtkNetCDFLFRicReader() override;
 
-  // Data can be defined on these 4 different mesh types
-  enum mesh_types {nodal, full_level_face, half_level_face, half_level_edge};
-
   // Return time steps from the input file and collect field (array) names
   int RequestInformation(vtkInformation*, vtkInformationVector**,
                          vtkInformationVector*) override;
@@ -92,9 +89,8 @@ private:
   char* FileName;
   int UseCartCoords, UseIndexAsVertCoord;
   double VerticalScale, VerticalBias;
-  std::map<std::string,bool> Fields;
+  std::map<std::string, DataField> Fields;
   std::vector<double> TimeSteps;
-  size_t NumberOfEdges2D;
 
   UGRIDMeshDescription mesh2D;
   CFVerticalAxis zAxis;

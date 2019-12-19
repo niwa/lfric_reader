@@ -35,7 +35,6 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->VerticalBias = 1.0;
   this->Fields.clear();
   this->TimeSteps.clear();
-  this->NumberOfEdges2D = 0;
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader constructor" << endl);
 }
@@ -137,45 +136,30 @@ int vtkNetCDFLFRicReader::RequestInformation(
     return 0;
   }
 
-  // Look for vertical axis
+  // Look for vertical axis - may be absent
   this->zAxis = inputFile.GetZAxisDescription(this->mesh2D.isLFRicXIOSFile,
                                               this->mesh2D.meshType);
+  vtkDebugMacro("Vertical axis:" << zAxis.axisVar << endl);
 
-  // Look for time axis
+  // Look for time axis - may be absent
   this->tAxis = inputFile.GetTAxisDescription();
+  vtkDebugMacro("Time axis:" << tAxis.axisVar << endl);
 
-  //
-  // Look for data fields
-  //
-
-  // Get field variable names, ignoring UGRID mesh definitions
-  // and other variables
-  for (std::string const &varName : inputFile.GetVarNames())
+  // If this is an LFRic output file, add fields that are defined on all supported meshes,
+  // otherwise accept only fields on the single mesh that is expected to be of half-level type
+  if (mesh2D.isLFRicXIOSFile)
   {
-    vtkDebugMacro("Request Information: Considering variable name=" << varName);
-
-    // There is no attribute that uniquely identifies fields, so
-    // check if this combination of attributes exists
-    bool hasFieldAtts = (inputFile.VarHasAtt(varName, "standard_name") or
-			 inputFile.VarHasAtt(varName, "long_name")) and
-                        inputFile.VarHasAtt(varName, "mesh");
-
-    // At the moment, variables can have up to 3 dimensions (time, vertical dimension,
-    // and horizontal unstructured dimension)
-    bool hasValidNumDims = inputFile.GetVarNumDims(varName) < 4;
-
-    if (hasFieldAtts and hasValidNumDims)
-    {
-      // If field is not in list, insert and default to "don't load"
-      std::map<std::string,bool>::const_iterator it = this->Fields.find(varName);
-      if (it == this->Fields.end())
-      {
-        this->Fields.insert(it, std::pair<std::string,bool>(varName,false));
-        vtkDebugMacro("=> inserted field" << endl);
-      }
-    }
+    inputFile.UpdateFieldMap(this->Fields, "face", "nMesh2d_half_levels_face", halfLevelFaceMesh,
+                             "half_levels", tAxis.axisDim);
+    inputFile.UpdateFieldMap(this->Fields, "face", "nMesh2d_full_levels_face", fullLevelFaceMesh,
+                             "full_levels", tAxis.axisDim);
   }
-  vtkDebugMacro("Number of data arrays found=" << this->Fields.size() << endl);
+  else
+  {
+    inputFile.UpdateFieldMap(this->Fields, "face", mesh2D.faceDim, halfLevelFaceMesh,
+                             zAxis.axisDim, tAxis.axisDim);
+  }
+  vtkDebugMacro("Number of fields found: " << this->Fields.size() << endl);
 
   // Get VTK object for handing over time step information
   vtkInformation *outInfo = outputVector->GetInformationObject(0);
@@ -371,8 +355,10 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   std::vector<double> node_coords_x = inputFile.GetVarDouble(this->mesh2D.nodeCoordXVar,
                                                              {0}, {mesh2D.numNodes});
+
   std::vector<double> node_coords_y = inputFile.GetVarDouble(this->mesh2D.nodeCoordYVar,
                                                              {0}, {mesh2D.numNodes});
+
   std::vector<long long> face_nodes = inputFile.GetVarLongLong(
                          this->mesh2D.faceNodeConnVar,
                          {0,0}, {this->mesh2D.numFaces, this->mesh2D.numVertsPerFace});
@@ -386,22 +372,6 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
     }
     vtkDebugMacro("Corrected face-node connectivity for start index=" <<
                    this->mesh2D.faceNodeStartIdx << endl);
-  }
-
-  //
-  // Determine number of edges
-  //
-
-  if (inputFile.VarHasAtt(this->mesh2D.meshTopologyVar, "edge_coordinates"))
-  {
-    const std::vector<std::string> edgeCoordVarNames =
-      inputFile.GetAttTextSplit(this->mesh2D.meshTopologyVar, "edge_coordinates");
-
-    // Assume that number of edges is the first dimension
-    const std::string edgeDimName = inputFile.GetVarDimName(edgeCoordVarNames[0], 0);
-    this->NumberOfEdges2D = inputFile.GetDimLen(edgeDimName);
-    vtkDebugMacro("edgeDimName=" << edgeDimName << " NumberOfEdges2D=" <<
-                  this->NumberOfEdges2D << endl);
   }
 
   //
@@ -419,13 +389,13 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
       levels[idx] = static_cast<double>(startLevel + idx);
     }
   }
-  else if (this->mesh2D.meshType == fullLevelFace)
+  else if (this->mesh2D.meshType == fullLevelFaceMesh)
   {
     // Load vertex heights from file
     levels = inputFile.GetVarDouble(this->zAxis.axisVar,
                                     {startLevel}, {numLevels+1});
   }
-  else if (this->mesh2D.meshType == halfLevelFace)
+  else if (this->mesh2D.meshType == halfLevelFaceMesh)
   {
     std::vector<double> halfLevels = inputFile.GetVarDouble(this->zAxis.axisVar,
                                      {0}, {this->zAxis.numLevels});
@@ -463,14 +433,18 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   // Resolve grid periodicity by mirroring nodes
   //
 
+  // Keep track of node count, in case that nodes are added to resolve
+  // grid periodicity
+  size_t numNodesCurrent = this->mesh2D.numNodes;
+
   if (!this->UseCartCoords)
   {
     vtkDebugMacro("Resolving grid periodicity..." << endl);
 
     resolvePeriodicGrid(node_coords_x, node_coords_y, face_nodes,
                         this->mesh2D.numFaces, this->mesh2D.numVertsPerFace);
-    // Reset nnodes to new count
-    this->mesh2D.numNodes = node_coords_x.size();
+    // Update node count to allow for added nodes
+    numNodesCurrent = node_coords_x.size();
   }
 
   this->UpdateProgress(0.5);
@@ -482,7 +456,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   vtkDebugMacro("Setting VTK points..." << endl);
 
   vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
-  points->SetNumberOfPoints(this->mesh2D.numNodes*(numLevels+1));
+  points->SetNumberOfPoints(numNodesCurrent*(numLevels+1));
   vtkDataArray * pointLocs = points->GetData();
 
   // Use vtkArrayDispatch mechanism to fill vtkDataArray directly, this is
@@ -513,7 +487,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
                                  (2*this->mesh2D.numVertsPerFace+1));
 
   SetConnectivityWorker connectWorker(face_nodes, numLevels, this->mesh2D.numFaces,
-                                      this->mesh2D.numVertsPerFace, this->mesh2D.numNodes);
+                                      this->mesh2D.numVertsPerFace, numNodesCurrent);
   typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Integrals> cellsDispatcher;
   if (!cellsDispatcher::Execute(cellConnect, connectWorker))
   {
@@ -565,209 +539,152 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
     return 0;
   }
 
-  // This code is currently disabled until edge-centered field can be handled correctly
-  // Get edge-face connectivity for handling W2 horizontal fields
-  // We have to assume here that the edges in the half-level edge and
-  // half-level face grids coincide
-  // const std::vector<long long> hl_edge_faces = inputFile.GetVarLongLong(
-  //                              "Mesh2d_half_levels_edge_face_links",
-  //                              {0,0}, {this->NumberOfEdges2D,2});
-
   this->SetProgressText("Loading Field Data");
+  this->UpdateProgress(0.0);
 
   int fieldCount = 0;
-  for (std::pair<std::string,bool> const &field : this->Fields)
+  for (std::pair<std::string, DataField> const &field : this->Fields)
   {
     // Load variable?
-    if (field.second)
+    if (field.second.active)
     {
-      std::string varName = field.first;
+      const std::string & fieldName = field.first;
+      const DataField & fieldSpec = field.second;
 
-      vtkDebugMacro("Reading variable " << varName << endl);
+      vtkDebugMacro("Reading variable " << fieldName << endl);
 
       std::vector<double> read_buffer;
       std::vector<size_t> start;
       std::vector<size_t> count;
 
-      read_buffer.clear();
-      start.clear();
-      count.clear();
+      const size_t numFieldDims = fieldSpec.dims.size();
+      start.resize(numFieldDims);
+      count.resize(numFieldDims);
 
-      // Add time dimension to slice arrays if it exists
-      if (inputFile.VarHasDim(varName, this->tAxis.axisDim))
+      // Number of vertical levels is imposed by numLevels
+      // Number of timesteps to be read is always 1
+      size_t numHorizontal = 1;
+      size_t numComponents = 1;
+
+      // Need strides for flexible dimension ordering
+      size_t componentStride = 1;
+      size_t horizontalStride = 1;
+      size_t verticalStride = 1;
+
+      // Retrieve field dimensions and strides
+      // Horizontal and component dimensions are always read in full
+      for (size_t dimIdx = 0; dimIdx < numFieldDims; dimIdx++)
       {
-        if (inputFile.GetVarDimName(varName, 0) == this->tAxis.axisDim)
+        switch (fieldSpec.dims[dimIdx].dimType)
 	{
-          start.push_back(timestep);
-          count.push_back(1);
-          vtkDebugMacro("Found time dimension" << endl);
+          case horizontalAxisDim:
+            numHorizontal = fieldSpec.dims[dimIdx].dimLength;
+            horizontalStride = fieldSpec.dims[dimIdx].dimStride;
+            start[dimIdx] = 0;
+            count[dimIdx] = numHorizontal;
+            break;
+
+          case componentAxisDim:
+            numComponents = fieldSpec.dims[dimIdx].dimLength;
+            componentStride = fieldSpec.dims[dimIdx].dimStride;
+            start[dimIdx] = 0;
+            count[dimIdx] = numComponents;
+            break;
+
+          case verticalAxisDim:
+            verticalStride = fieldSpec.dims[dimIdx].dimStride;
+            start[dimIdx] = startLevel;
+            count[dimIdx] = numLevels;
+            // Full-level meshes are defined on cell interfaces,
+            // need to read extra level in that case
+            if (fieldSpec.meshType == fullLevelFaceMesh)
+	    {
+              count[dimIdx]++;
+            }
+            break;
+
+          case timeAxisDim:
+            start[dimIdx] = timestep;
+            count[dimIdx] = 1;
+            break;
+
+          default:
+            vtkErrorMacro("Unknown field dimension." << endl);
+            return 0;
         }
-        else
-	{
-          vtkWarningMacro("Time dimension must be first. Skipping this variable..." << endl);
-        }
-      }
-      else
-      {
-        vtkDebugMacro("Found NO time dimension" << endl);
+        vtkDebugMacro("Dim " << dimIdx << " of " << numFieldDims << ": load " <<
+                      count[dimIdx] << " of " << fieldSpec.dims[dimIdx].dimLength <<
+                      " elements at index " << start[dimIdx] << "\n");
       }
 
-      // Add vertical dimension to slice arrays if it exists
-      // Note that there may be several vertical axes, so
-      // these names need to be partially hard-coded
-      bool hasVertDim = false;
-      if (inputFile.VarHasDim(varName, "half_levels") or
-          inputFile.VarHasDim(varName, "full_levels") or
-          inputFile.VarHasDim(varName, this->zAxis.axisDim))
+      // Read data if field has a vertical dimension, or if this piece
+      // contains the surface level
+      if (fieldSpec.hasVerticalDim or (startLevel == 0))
       {
-        start.push_back(startLevel);
-        count.push_back(numLevels);
-        hasVertDim = true;
-        vtkDebugMacro("Found vertical dimension" << endl);
-      }
-      else
-      {
-        vtkDebugMacro("Found NO vertical dimension" << endl);
+        read_buffer = inputFile.GetVarDouble(fieldName, start, count);
       }
 
-      // Find out which mesh type is used for this variable, we already
-      // know that this variable has the "mesh" attribute
-      mesh_types mesh_type;
-      const std::string mesh_name = inputFile.GetAttText(varName, "mesh");
+      // Disable component dimension if not present
+      if (not fieldSpec.hasComponentDim) componentStride = read_buffer.size();
 
-      // Assume half-level mesh by default, unless "Mesh2d_full_level" mesh is
-      // present, in which case there will be several mesh types
-      if ( this->mesh2D.meshTopologyVar != "Mesh2d_full_levels" or
-           mesh_name == "Mesh2d_half_levels" )
+      // Fill remaining space with NaNs if vertical dimension not present (2D fields)
+      if (not fieldSpec.hasVerticalDim)
       {
-        mesh_type = half_level_face;
-        vtkDebugMacro("Field is defined on half level face mesh" << endl);
+        // Keep vertical dimension stride before resizing to 3D
+        verticalStride = read_buffer.size();
 
-        // Add horizontal index dimension to slice arrays - always exists
-        start.push_back(0);
-        count.push_back(this->mesh2D.numFaces);
-
-        // Only call read method if we expect any data for this piece (partition)
-        // Always the case for a 3D field, and if piece contains surface layer for
-        // a 2D field
-        if (hasVertDim or (startLevel == 0))
+        if (fieldSpec.meshType == halfLevelFaceMesh)
         {
-          read_buffer = inputFile.GetVarDouble(varName, start, count);
-        }
-
-        // Fill remaining space with NaNs, this will only apply to 2D fields
-        if (not hasVertDim)
-        {
-          read_buffer.resize(numLevels*this->mesh2D.numFaces,
+          read_buffer.resize(numLevels*numHorizontal*numComponents,
                              std::numeric_limits<double>::quiet_NaN());
         }
-      }
-      else if ( mesh_name == "Mesh2d_edge_half_levels" )
-      {
-        mesh_type = half_level_edge;
-        vtkDebugMacro("Field is defined on half level edge mesh" << endl);
-
-        start.push_back(0);
-        count.push_back(this->NumberOfEdges2D);
-
-        if (hasVertDim or (startLevel == 0))
+        else if (fieldSpec.meshType == fullLevelFaceMesh)
         {
-          read_buffer = inputFile.GetVarDouble(varName, start, count);
-        }
-
-        if (not hasVertDim)
-        {
-          read_buffer.resize(numLevels*this->NumberOfEdges2D,
+          read_buffer.resize((numLevels+1)*numHorizontal*numComponents,
                              std::numeric_limits<double>::quiet_NaN());
         }
-      }
-      else if ( mesh_name == "Mesh2d_full_levels" )
-      {
-        mesh_type = full_level_face;
-        vtkDebugMacro("Field is defined on full level face mesh" << endl);
-
-        // Need to read extra level if field is 3D
-        if (hasVertDim)
-        {
-          count.back() += 1;
-        }
-
-        start.push_back(0);
-        count.push_back(this->mesh2D.numFaces);
-
-        if (hasVertDim or (startLevel == 0))
-        {
-          read_buffer = inputFile.GetVarDouble(varName, start, count);
-        }
-
-        if (not hasVertDim)
-        {
-          read_buffer.resize((numLevels+1)*this->mesh2D.numFaces,
-                             std::numeric_limits<double>::quiet_NaN());
-        }
-      }
-      // Support for nodal grid (or other grids) will be added as needed
-      else
-      {
-        vtkErrorMacro("Unknown mesh." << endl);
-        return 0;
       }
 
       vtkDebugMacro("Setting vtkDoubleArray for this field..." << endl);
 
       // Create vtkDoubleArray for field data, vector components are stored separately
       vtkSmartPointer<vtkDoubleArray> dataField = vtkSmartPointer<vtkDoubleArray>::New();
-      dataField->SetNumberOfComponents(1);
+      dataField->SetNumberOfComponents(numComponents);
       dataField->SetNumberOfTuples(numLevels*this->mesh2D.numFaces);
-      dataField->SetName(varName.c_str());
+      dataField->SetName(fieldName.c_str());
 
-      switch(mesh_type)
+      // Sort data into VTK data structure
+      switch(fieldSpec.meshType)
       {
-        case half_level_face :
+        case halfLevelFaceMesh :
           vtkDebugMacro("half level face mesh: no interpolation needed" << endl);
-          for (size_t i = 0; i < numLevels*this->mesh2D.numFaces; i++)
+          for (size_t bufferIdx = 0; bufferIdx < read_buffer.size(); bufferIdx++)
           {
-            dataField->SetComponent(static_cast<vtkIdType>(i), 0, read_buffer[i]);
+            const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
+            const size_t iVertical = bufferIdx/verticalStride % numLevels;
+            const size_t iComponent = bufferIdx/componentStride % numComponents;
+            const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
+            dataField->SetComponent(iCell, iComponent, read_buffer[bufferIdx]);
           }
           break;
-        case full_level_face :
+        case fullLevelFaceMesh :
           vtkDebugMacro("full level face mesh: averaging top and bottom faces" << endl);
-          for (size_t i = 0; i < numLevels*this->mesh2D.numFaces; i++)
+          const size_t numLevelsFull = numLevels+1;
+          for (size_t bufferIdx = 0; bufferIdx < read_buffer.size(); bufferIdx++)
           {
-            const double bottomval = read_buffer[i];
-            const double topval = read_buffer[i+this->mesh2D.numFaces];
-            dataField->SetComponent(static_cast<vtkIdType>(i), 0, 0.5*(bottomval+topval));
+            const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
+            const size_t iVertical = bufferIdx/verticalStride % numLevelsFull;
+            const size_t iComponent = bufferIdx/componentStride % numComponents;
+            const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
+            // Skip the last full-level as we are averaging onto half-levels
+            if (iVertical < numLevels)
+            {
+              const double fieldValue = 0.5*(read_buffer[bufferIdx]+
+                                             read_buffer[bufferIdx+verticalStride]);
+              dataField->SetComponent(iCell, iComponent, fieldValue);
+            }
           }
           break;
-        case half_level_edge:
-          vtkWarningMacro("WARNING: edge-centered fields cannot be handled correctly at the moment" << endl);
-          vtkDebugMacro("half level edge mesh: averaging four edges" << endl);
-          dataField->Fill(std::numeric_limits<double>::quiet_NaN());
-
-          // This code is currently disabled until edge-centered field can be handled correctly
-          // It also needs to be modified to handle piece requests (startLevel/stopLevel)
-          // for (size_t edge = 0; edge < this->NumberOfEdges2D; edge++)
-          // {
-          //   // Each edge is shared by 2 faces
-          //   for (size_t side = 0; side < 2; side++)
-          //   {
-          //     // Look up face ID, then evaluate entire vertical column
-          //     const size_t face = static_cast<size_t>(hl_edge_faces[edge*2+side]);
-          //     for (size_t level = 0; level < (this->NumberOfLevels-1); level++)
-          //     {
-          //       const vtkIdType cellId = static_cast<vtkIdType>(face+level*this->NumberOfFaces2D);
-          //       double fieldval = dataField->GetComponent(cellId, 0);
-          //       // Pick up data in edge grid
-          //       fieldval += 0.25*read_buffer[edge+level*this->NumberOfEdges2D];
-          //       dataField->SetComponent(cellId, 0, fieldval);
-          //     }
-          //   }
-          // }
-
-          break;
-        case nodal:
-          vtkErrorMacro("nodal mesh: not currently supported" << endl);
-          dataField->Fill(std::numeric_limits<double>::quiet_NaN());
       }
 
       grid->GetCellData()->AddArray(dataField);
@@ -832,7 +749,7 @@ const char* vtkNetCDFLFRicReader::GetCellArrayName(const int index)
   // ParaView also wants us to provide array names by index. Input files
   // shouldn't contain too many arrays, so we'll simply count map keys.
   int counter = 0;
-  std::map<std::string,bool>::const_iterator it;
+  std::map<std::string, DataField>::const_iterator it;
   for (it = this->Fields.begin(); it != this->Fields.end();
        it++, counter++)
   {
@@ -851,10 +768,10 @@ const char* vtkNetCDFLFRicReader::GetCellArrayName(const int index)
 int vtkNetCDFLFRicReader::GetCellArrayStatus(const char* name)
 {
   int status;
-  std::map<std::string,bool>::const_iterator it = this->Fields.find(name);
+  std::map<std::string, DataField>::const_iterator it = this->Fields.find(name);
   if (it != this->Fields.end())
   {
-    status = static_cast<int>(it->second);
+    status = static_cast<int>(it->second.active);
   }
   else
   {
@@ -868,10 +785,10 @@ int vtkNetCDFLFRicReader::GetCellArrayStatus(const char* name)
 
 void vtkNetCDFLFRicReader::SetCellArrayStatus(const char* name, const int status)
 {
-  std::map<std::string,bool>::iterator it = this->Fields.find(name);
+  std::map<std::string, DataField>::iterator it = this->Fields.find(name);
   if (it != this->Fields.end())
   {
-    it->second = static_cast<bool>(status);
+    it->second.active = static_cast<bool>(status);
     this->Modified();
   }
   else

@@ -36,6 +36,11 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_def_dim(ncId, "nMesh2d_full_levels_edge", nMesh2dFullLevelsEdgeLen,
                           &nMesh2dFullLevelsEdgeDimId));
 
+  const size_t nMesh2dHalfLevelsFaceLen = 54;
+  int nMesh2dHalfLevelsFaceDimId;
+  ncErrorMacro(nc_def_dim(ncId, "nMesh2d_half_levels_face", nMesh2dHalfLevelsFaceLen,
+                          &nMesh2dHalfLevelsFaceDimId));
+
   const size_t nMesh2dFullLevelsFaceLen = 54;
   int nMesh2dFullLevelsFaceDimId;
   ncErrorMacro(nc_def_dim(ncId, "nMesh2d_full_levels_face", nMesh2dFullLevelsFaceLen,
@@ -49,15 +54,22 @@ void generate_testfile(const bool valid)
   int FourDimId;
   ncErrorMacro(nc_def_dim(ncId, "Four", FourLen, &FourDimId));
 
-  // Time and vertical levels
+  // Time, vertical levels, and field components
 
   const size_t timeCounterLen = 0;
   int timeCounterDimId;
   ncErrorMacro(nc_def_dim(ncId, "time_counter", timeCounterLen, &timeCounterDimId));
 
-  const size_t levelsLen = 4;
-  int levelsDimId;
-  ncErrorMacro(nc_def_dim(ncId, "full_levels", levelsLen, &levelsDimId));
+  const size_t levelsLen = 3;
+  int halfLevelsDimId;
+  ncErrorMacro(nc_def_dim(ncId, "half_levels", levelsLen, &halfLevelsDimId));
+
+  int fullLevelsDimId;
+  ncErrorMacro(nc_def_dim(ncId, "full_levels", levelsLen+1, &fullLevelsDimId));
+
+  const size_t componentLen = 3;
+  int componentDimId;
+  ncErrorMacro(nc_def_dim(ncId, "some_component", componentLen, &componentDimId));
 
   // ------------------------------------------------------------------------------------------
 
@@ -67,7 +79,7 @@ void generate_testfile(const bool valid)
 
   // Valid file needs to have dummy variable "Mesh2d_full_levels" with UGRID metadata
   int Mesh2dFullLevelsId;
-  std::string meshVarName = "Mesh2d_full_levels";
+  const std::string meshVarName = "Mesh2d_full_levels";
   ncErrorMacro(nc_def_var(ncId, meshVarName.c_str(), NC_INT, 0,
                           0, &Mesh2dFullLevelsId));
 
@@ -131,10 +143,15 @@ void generate_testfile(const bool valid)
                           Mesh2dFullLevelsEdgeYDims,
                           &Mesh2dFullLevelsEdgeYId));
 
-  const int FullLevelsDims[] = {levelsDimId};
+  const int FullLevelsDims[] = {fullLevelsDimId};
   int FullLevelsId;
   ncErrorMacro(nc_def_var(ncId, "full_levels", NC_FLOAT, 1, FullLevelsDims,
                           &FullLevelsId));
+
+  const int HalfLevelsDims[] = {halfLevelsDimId};
+  int HalfLevelsId;
+  ncErrorMacro(nc_def_var(ncId, "half_levels", NC_FLOAT, 1, HalfLevelsDims,
+                          &HalfLevelsId));
 
   // Set UGRID mesh variable attributes
   if (valid)
@@ -150,6 +167,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_att_text(ncId, Mesh2dFullLevelsId, "long_name", 37,
                                "Topology data of 2D unstructured mesh"));
 
+  // Topology dimension = 2 means faces
   const int topDimAtt[] = {2};
   ncErrorMacro(nc_put_att_int(ncId, Mesh2dFullLevelsId, "topology_dimension",
                               NC_INT, 1, topDimAtt));
@@ -233,28 +251,34 @@ void generate_testfile(const bool valid)
 
   // Test data variables and attributes
 
-  const int var1Dims[] = {levelsDimId, nMesh2dFullLevelsFaceDimId};
+  const int var1Dims[] = {halfLevelsDimId, nMesh2dHalfLevelsFaceDimId};
   int var1Id;
   ncErrorMacro(nc_def_var(ncId, "var1", NC_DOUBLE, 2, var1Dims, &var1Id));
   ncErrorMacro(nc_put_att_text(ncId, var1Id, "long_name", 4, "var1"));
   ncErrorMacro(nc_put_att_text(ncId, var1Id, "units", 4, "none"));
-  ncErrorMacro(nc_put_att_text(ncId, var1Id, "mesh", meshVarName.size(), meshVarName.c_str()));
+  ncErrorMacro(nc_put_att_text(ncId, var1Id, "mesh", 16, "value not needed"));
+  ncErrorMacro(nc_put_att_text(ncId, var1Id, "location", 4, "face"));
+  ncErrorMacro(nc_put_att_text(ncId, var1Id, "coordinates", 16, "value not needed"));
   const int intAttValue = 7;
   ncErrorMacro(nc_put_att_int(ncId, var1Id, "index", NC_INT, 1, &intAttValue));
 
-  const int var2Dims[] = {levelsDimId, nMesh2dFullLevelsFaceDimId};
+  const int var2Dims[] = {nMesh2dHalfLevelsFaceDimId, componentDimId};
   int var2Id;
   ncErrorMacro(nc_def_var(ncId, "var2", NC_DOUBLE, 2, var2Dims, &var2Id));
   ncErrorMacro(nc_put_att_text(ncId, var2Id, "long_name", 4, "var2"));
   ncErrorMacro(nc_put_att_text(ncId, var2Id, "units", 4, "none"));
-  ncErrorMacro(nc_put_att_text(ncId, var2Id, "mesh", meshVarName.size(), meshVarName.c_str()));
+  ncErrorMacro(nc_put_att_text(ncId, var2Id, "mesh", 16, "value not needed"));
+  ncErrorMacro(nc_put_att_text(ncId, var2Id, "location", 4, "face"));
+  ncErrorMacro(nc_put_att_text(ncId, var2Id, "coordinates", 16, "value not needed"));
 
-  const int var3Dims[] = {levelsDimId, nMesh2dFullLevelsFaceDimId};
+  const int var3Dims[] = {nMesh2dFullLevelsFaceDimId, fullLevelsDimId};
   int var3Id;
   ncErrorMacro(nc_def_var(ncId, "var3", NC_DOUBLE, 2, var3Dims, &var3Id));
   ncErrorMacro(nc_put_att_text(ncId, var3Id, "long_name", 4, "var3"));
   ncErrorMacro(nc_put_att_text(ncId, var3Id, "units", 4, "none"));
-  ncErrorMacro(nc_put_att_text(ncId, var3Id, "mesh", meshVarName.size(), meshVarName.c_str()));
+  ncErrorMacro(nc_put_att_text(ncId, var3Id, "mesh", 16, "value not needed"));
+  ncErrorMacro(nc_put_att_text(ncId, var3Id, "location", 4, "face"));
+  ncErrorMacro(nc_put_att_text(ncId, var3Id, "coordinates", 16, "value not needed"));
 
   // End of define mode
   ncErrorMacro(nc_enddef(ncId));
@@ -264,10 +288,10 @@ void generate_testfile(const bool valid)
   size_t count = 0;
   size_t count2[2];
 
-  static int Mesh2d_full_levels_data[] = {-2147483647};
+  const int Mesh2d_full_levels_data[] = {-2147483647};
   ncErrorMacro(nc_put_var1(ncId, Mesh2dFullLevelsId, &count, Mesh2d_full_levels_data));
 
-  int Mesh2d_full_levels_face_nodes_data[] =
+  const int Mesh2d_full_levels_face_nodes_data[] =
     {4, 5, 2, 1, 5, 6, 3, 2, 6, 13, 10, 3, 7, 8, 5, 4, 8, 9, 6, 5, 9, 16, 13, 6, 50,
      47, 8, 7, 47, 44, 9, 8, 44, 41, 16, 9, 13, 14, 11, 10, 14, 15, 12, 11, 15, 22,
      19, 12, 16, 17, 14, 13, 17, 18, 15, 14, 18, 25, 22, 15, 41, 42, 17, 16, 42, 43,
@@ -284,7 +308,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsFaceNodesId, start2, count2,
                            Mesh2d_full_levels_face_nodes_data));
 
-  int Mesh2d_full_levels_edge_nodes_data[] =
+  const int Mesh2d_full_levels_edge_nodes_data[] =
     {1, 2, 4, 1, 5, 4, 2, 3, 5, 2, 6, 5, 3, 10, 6, 3, 13, 6, 7, 4, 8, 7, 8, 5, 9, 8,
      9, 6, 16, 9, 50, 7, 47, 50, 47, 8, 44, 47, 44, 9, 41, 44, 10, 11, 13, 10, 14, 13,
      11, 12, 14, 11, 15, 14, 12, 19, 15, 12, 22, 15, 16, 13, 17, 16, 17, 14, 18, 17,
@@ -301,7 +325,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsEdgeNodesId, start2, count2,
                            Mesh2d_full_levels_edge_nodes_data));
 
-  int Mesh2d_full_levels_face_edges_data[] =
+  const int Mesh2d_full_levels_face_edges_data[] =
     {2, 3, 5, 1, 5, 6, 8, 4, 8, 9, 23, 7, 10, 11, 12, 3, 12, 13, 14, 6, 14, 15, 31, 9,
      16, 17, 18, 11, 18, 19, 20, 13, 20, 21, 37, 15, 23, 24, 26, 22, 26, 27, 29, 25, 29,
      30, 44, 28, 31, 32, 33, 24, 33, 34, 35, 27, 35, 36, 52, 30, 37, 38, 39, 32, 39, 40,
@@ -318,7 +342,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsFaceEdgesId, start2, count2,
                            Mesh2d_full_levels_face_edges_data));
 
-  int Mesh2d_full_levels_face_links_data[] =
+  const int Mesh2d_full_levels_face_links_data[] =
     {30, 4, 2, 37, 1, 5, 3, 40, 2, 6, 10, 43, 33, 7, 5, 1, 4, 8, 6, 2, 5, 9, 13, 3, 36,
      52, 8, 4, 7, 49, 9, 5, 8, 46, 16, 6, 3, 13, 11, 43, 10, 14, 12, 44, 11, 15, 19, 45,
      6, 16, 14, 10, 13, 17, 15, 11, 14, 18, 22, 12, 9, 46, 17, 13, 16, 47, 18, 14, 17,
@@ -334,7 +358,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsFaceLinksId, start2, count2,
                            Mesh2d_full_levels_face_links_data));
 
-  double Mesh2d_full_levels_node_x_data[] =
+  const double Mesh2d_full_levels_node_x_data[] =
     {315, 345, 15, 315, 345, 15, 315, 345, 15, 45, 75, 105, 45, 75, 105,
      45, 75, 105, 135, 165, 195, 135, 165, 195, 135, 165, 195, 225, 255,
      285, 225, 255, 285, 225, 255, 285, 315, 225, 45, 135, 45, 75, 105,
@@ -343,7 +367,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsNodeXId, &start, &count,
                            Mesh2d_full_levels_node_x_data));
 
-  double Mesh2d_full_levels_node_y_data[] =
+  const double Mesh2d_full_levels_node_y_data[] =
     {35.2643896827547, 44.0070271956363, 44.0070271956363, 10.7285831216091,
      14.5108186990699, 14.5108186990699, -10.7285831216091, -14.5108186990699,
      -14.5108186990699, 35.2643896827547, 44.0070271956363, 44.0070271956363,
@@ -362,7 +386,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsNodeYId, &start, &count,
                            Mesh2d_full_levels_node_y_data));
 
-  double Mesh2d_full_levels_face_x_data[] =
+  const double Mesh2d_full_levels_face_x_data[] =
     {329.508305958902, 0, 30.4916940410979, 329.886509860388, 0, 30.1134901396116,
      329.508305958902, 2.9271427301566e-15, 30.4916940410979, 59.5083059589021,
      90, 120.491694041098, 59.8865098603884, 90, 120.113490139612, 59.5083059589021,
@@ -375,7 +399,7 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsFaceXId, &start, &count,
                            Mesh2d_full_levels_face_x_data));
 
-  double Mesh2d_full_levels_face_y_data[] =
+  const double Mesh2d_full_levels_face_y_data[] =
     {26.9038500851278, 30.1134901396116, 26.9038500851278, 2.53207598583004e-15,
      3.40125124033106e-15, 2.53207598583004e-15, -26.9038500851278, -30.1134901396116,
      -26.9038500851278, 26.9038500851278, 30.1134901396116, 26.9038500851278,
@@ -393,25 +417,62 @@ void generate_testfile(const bool valid)
   ncErrorMacro(nc_put_vara(ncId, Mesh2dFullLevelsFaceYId, &start, &count,
                            Mesh2d_full_levels_face_y_data));
 
-  float FullLevelsData[] = {0.0, 0.5, 1.0, 1.5};
+  const float FullLevelsData[] = {0.0, 0.5, 1.0, 1.5};
   count = 4;
   ncErrorMacro(nc_put_vara(ncId, FullLevelsId, &start, &count, FullLevelsData));
+
+  const float HalfLevelsData[] = {0.25, 0.75, 1.25};
+  count = 3;
+  ncErrorMacro(nc_put_vara(ncId, HalfLevelsId, &start, &count, HalfLevelsData));
 
   // Test variables
 
   std::vector<double> varData;
-  varData.resize(nMesh2dFullLevelsFaceLen*levelsLen);
 
+  // Half-level data
   count2[0] = levelsLen;
   count2[1] = nMesh2dFullLevelsFaceLen;
+  varData.resize(count2[0]*count2[1]);
 
-  std::fill(varData.begin(), varData.end(), 1.0);
+  // Store dimensions to help testing
+  varData[0] = static_cast<double>(nMesh2dFullLevelsFaceLen);
+  varData[1] = static_cast<double>(levelsLen);
+  varData[2] = static_cast<double>(componentLen);
+
+  // Fill the rest of the array with number sequence to test cell ordering
+  for (size_t idx = 3; idx < varData.size(); idx++)
+  {
+    varData[idx] = static_cast<double>(idx);
+  }
   ncErrorMacro(nc_put_vara_double(ncId, var1Id, start2, count2, varData.data()));
 
-  std::fill(varData.begin(), varData.end(), 2.0);
+  // Half-level 2D data with multiple components
+  count2[0] = nMesh2dFullLevelsFaceLen;
+  count2[1] = componentLen;
+  varData.resize(count2[0]*count2[1]);
+
+  // Fill array with number sequence to test component ordering
+  for (size_t idx = 0; idx < varData.size(); idx++)
+  {
+    varData[idx] = static_cast<double>(idx);
+  }
   ncErrorMacro(nc_put_vara_double(ncId, var2Id, start2, count2, varData.data()));
 
-  std::fill(varData.begin(), varData.end(), 3.0);
+  // Full-level 3D data with inverse dimension order
+  count2[0] = nMesh2dFullLevelsFaceLen;
+  count2[1] = levelsLen+1;
+  varData.resize(count2[0]*count2[1]);
+
+  // Fill each level with the same number to test level ordering
+  size_t bufferIdx = 0;
+  for (size_t iFace = 0; iFace < nMesh2dFullLevelsFaceLen; iFace++)
+  {
+    for (size_t iLevel = 0; iLevel < levelsLen+1; iLevel++)
+    {
+      varData[bufferIdx] = static_cast<double>(iLevel);
+      bufferIdx++;
+    }
+  }
   ncErrorMacro(nc_put_vara_double(ncId, var3Id, start2, count2, varData.data()));
 
   ncErrorMacro(nc_close(ncId));

@@ -10,9 +10,14 @@
 #define netCDFLFRicFile_h
 #include <vector>
 #include <string>
+#include <map>
 
-// The following LFRic mesh 2D types are currently supported
-enum mesh2DTypes {halfLevelFace, fullLevelFace};
+// LFRic 2D mesh types
+enum mesh2DTypes {unknownMesh, halfLevelFaceMesh, fullLevelFaceMesh};
+
+// Dimension types for identifying field variable dimensions
+enum dimTypes {unknownAxisDim, horizontalAxisDim, verticalAxisDim,
+               timeAxisDim, componentAxisDim};
 
 // Holds metadata for unstructured part of VTK grid
 struct UGRIDMeshDescription
@@ -46,7 +51,11 @@ struct UGRIDMeshDescription
   long long faceNodeStartIdx;
 
   UGRIDMeshDescription() : isLFRicXIOSFile(false), numTopologies(0),
-    numNodes(0), numFaces(0), numVertsPerFace(0), faceNodeStartIdx(0) {}
+    meshType(unknownMesh), numNodes(0), numFaces(0), numVertsPerFace(0),
+    nodeDim("None"), faceDim("None"), vertDim("None"),
+    meshTopologyVar("None"), nodeCoordXVar("None"),
+    nodeCoordYVar("None"), faceNodeConnVar("None"),
+    faceNodeStartIdx(0) {}
 };
 
 // Holds metadata for vertical axis in VTK grid
@@ -59,7 +68,7 @@ struct CFVerticalAxis
   std::string axisDim;
   std::string axisVar;
 
-  CFVerticalAxis(): numLevels(0) {}
+  CFVerticalAxis() : numLevels(0), axisDim("None"), axisVar("None") {}
 };
 
 // Holds metadata for time axis
@@ -71,7 +80,33 @@ struct CFTimeAxis
   std::string axisDim;
   std::string axisVar;
 
-  CFTimeAxis(): numTimeSteps(0) {}
+  CFTimeAxis() : numTimeSteps(0), axisDim("None"), axisVar("None") {}
+};
+
+// Holds metadata for field variable dimensions
+struct fieldDim
+{
+  dimTypes dimType;
+  size_t dimLength;
+  size_t dimStride;
+
+  fieldDim() : dimType(unknownAxisDim), dimLength(0), dimStride(1) {}
+};
+
+// Holds metadata for data fields
+struct DataField
+{
+  bool active;
+  mesh2DTypes meshType;
+  bool hasComponentDim;
+  bool hasHorizontalDim;
+  bool hasVerticalDim;
+  bool hasTimeDim;
+  std::vector<fieldDim> dims;
+
+  DataField() : active(false), meshType(unknownMesh),
+    hasComponentDim(false), hasHorizontalDim(false),
+    hasVerticalDim(false), hasTimeDim(false) {}
 };
 
 class netCDFLFRicFile
@@ -110,12 +145,12 @@ public:
   std::vector<std::string> GetVarNames();
 
   std::vector<double> GetVarDouble(const std::string& varName,
-                                   const std::vector<size_t> start,
-                                   const std::vector<size_t> count);
+                                   const std::vector<size_t>& start,
+                                   const std::vector<size_t>& count);
 
   std::vector<long long> GetVarLongLong(const std::string& varName,
-                                        const std::vector<size_t> start,
-                                        const std::vector<size_t> count);
+                                        const std::vector<size_t>& start,
+                                        const std::vector<size_t>& count);
 
   UGRIDMeshDescription GetMesh2DDescription();
 
@@ -123,6 +158,13 @@ public:
                                      const mesh2DTypes meshType);
 
   CFTimeAxis GetTAxisDescription();
+
+  void UpdateFieldMap(std::map<std::string, DataField> & fields,
+                      const std::string & fieldLoc,
+                      const std::string & horizontalDim,
+                      const mesh2DTypes & horizontalMeshType,
+                      const std::string & verticalDim,
+                      const std::string & timeDim);
 
 private:
 

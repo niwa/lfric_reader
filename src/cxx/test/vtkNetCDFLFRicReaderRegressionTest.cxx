@@ -3,6 +3,7 @@
 #include "vtkCellTypes.h"
 #include "vtkCellData.h"
 #include "vtkPointData.h"
+#include "vtkDoubleArray.h"
 #include "vtkXMLPUnstructuredGridWriter.h"
 
 // ------------------------------------------------------------------------------------------
@@ -141,25 +142,93 @@ TEST_CASE( "Data Fields", "[regression]" )
     REQUIRE( grid->GetPointData()->GetNumberOfArrays() == 0 );
   }
 
-  SECTION( "All Arrays Are Scalar" )
+  SECTION( "Arrays Have Correct Number Of Components" )
   {
+    // Retrieve number of components from first data array
+    vtkDoubleArray * dataArray = vtkDoubleArray::SafeDownCast(
+      grid->GetCellData()->GetArray(0));
+    const vtkIdType componentLen = static_cast<vtkIdType>(dataArray->GetComponent(2, 0));
+
     REQUIRE( grid->GetCellData()->GetArray(0)->GetNumberOfComponents() == 1 );
-    REQUIRE( grid->GetCellData()->GetArray(1)->GetNumberOfComponents() == 1 );
+    REQUIRE( grid->GetCellData()->GetArray(1)->GetNumberOfComponents() == componentLen );
     REQUIRE( grid->GetCellData()->GetArray(2)->GetNumberOfComponents() == 1 );
   }
 
-  SECTION( "Cell Data Fields Contain Correct Data" )
+  SECTION( "Cell Data Fields Have Correct Contents" )
   {
-    double dataRange[2];
-    grid->GetCellData()->GetArray(0)->GetRange(dataRange,0);
-    REQUIRE( dataRange[0] == Approx(1.0) );
-    REQUIRE( dataRange[1] == Approx(1.0) );
-    grid->GetCellData()->GetArray(1)->GetRange(dataRange,0);
-    REQUIRE( dataRange[0] == Approx(2.0) );
-    REQUIRE( dataRange[1] == Approx(2.0) );
-    grid->GetCellData()->GetArray(2)->GetRange(dataRange,0);
-    REQUIRE( dataRange[0] == Approx(3.0) );
-    REQUIRE( dataRange[1] == Approx(3.0) );
+    //
+    // First field - test 3D cell ordering
+    //
+
+    vtkDoubleArray * dataArray = vtkDoubleArray::SafeDownCast(
+      grid->GetCellData()->GetArray(0));
+
+    // Retrieve dimensions
+    const vtkIdType faceLen = static_cast<vtkIdType>(dataArray->GetComponent(0, 0));
+    const vtkIdType levelsLen = static_cast<vtkIdType>(dataArray->GetComponent(1, 0));
+    const vtkIdType componentLen = static_cast<vtkIdType>(dataArray->GetComponent(2, 0));
+
+    // Check data array size
+    REQUIRE( dataArray->GetNumberOfTuples() == faceLen*levelsLen );
+
+    // Check remaining field data
+    bool valid = true;
+    for (vtkIdType idx = 3; idx < faceLen*levelsLen; idx++)
+    {
+      valid &= static_cast<vtkIdType>(dataArray->GetComponent(idx, 0)) == idx;
+    }
+    REQUIRE( valid == true );
+
+    //
+    // Second field - test component ordering and 2D field handling
+    //
+
+    dataArray = vtkDoubleArray::SafeDownCast(grid->GetCellData()->GetArray(1));
+
+    REQUIRE( dataArray->GetNumberOfTuples() == faceLen*levelsLen );
+
+    valid = true;
+    for (vtkIdType iLevel = 0; iLevel < levelsLen; iLevel++)
+    {
+      for (vtkIdType iFace = 0; iFace < faceLen; iFace++)
+      {
+        for (vtkIdType iComp = 0; iComp < componentLen; iComp++)
+        {
+          // Surface level must contain data, the rest must be NaNs
+          if (iLevel == 0)
+          {
+            valid &= static_cast<vtkIdType>(dataArray->GetComponent(iLevel*faceLen+iFace, iComp)) ==
+              iFace*componentLen+iComp;
+          }
+          else
+          {
+            valid &= isnan(dataArray->GetComponent(iLevel*faceLen+iFace, iComp));
+          }
+        }
+      }
+    }
+    REQUIRE( valid == true );
+
+    //
+    // Third field - test inverse dimension ordering and full-level grid
+    //
+
+    dataArray = vtkDoubleArray::SafeDownCast(grid->GetCellData()->GetArray(2));
+
+    REQUIRE( dataArray->GetNumberOfTuples() == faceLen*levelsLen );
+
+    valid = true;
+    for (vtkIdType iLevel = 0; iLevel < levelsLen; iLevel++)
+    {
+      for (vtkIdType iFace = 0; iFace < faceLen; iFace++)
+      {
+        // Averaging of full-level data adds 0.5
+        valid &= static_cast<vtkIdType>(dataArray->GetComponent(iLevel*faceLen+iFace, 0)-0.5) ==
+          iLevel;
+      }
+    }
+    REQUIRE( valid == true );
+
   }
 
   reader->Delete();

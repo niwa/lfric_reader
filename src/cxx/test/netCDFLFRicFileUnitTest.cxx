@@ -61,7 +61,7 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
 
   SECTION( "GetVarDimName With Valid Index" )
   {
-    REQUIRE( ncFile.GetVarDimName("var1", 0) == "full_levels" );
+    REQUIRE( ncFile.GetVarDimName("var1", 0) == "half_levels" );
   }
 
   SECTION( "GetAttInt Returns Correct Attribute" )
@@ -107,8 +107,8 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
 
   SECTION( "VarHasDim Returns True If Dimension Exists And Is Used" )
   {
-    REQUIRE( ncFile.HasDim("full_levels") == true );
-    REQUIRE( ncFile.VarHasDim("var1", "full_levels") == true );
+    REQUIRE( ncFile.HasDim("half_levels") == true );
+    REQUIRE( ncFile.VarHasDim("var1", "half_levels") == true );
   }
 
   SECTION( "VarHasAtt Returns False If Attribute Nonexistent" )
@@ -140,8 +140,8 @@ TEST_CASE( "NetCDF Data Tests", "[data]" )
 
   SECTION( "GetVarDouble Returns Correct Result" )
   {
-    std::vector<double> result = ncFile.GetVarDouble("var1", {0,0}, {1,1});
-    REQUIRE( result[0] == Approx(1.0) );
+    std::vector<double> result = ncFile.GetVarDouble("var2", {0,0}, {1,1});
+    REQUIRE( result[0] == Approx(0.0) );
   }
 
   SECTION( "GetVarDouble Returns NaN With Incorrect Number Of Dimensions" )
