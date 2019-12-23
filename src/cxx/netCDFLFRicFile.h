@@ -13,11 +13,14 @@
 #include <map>
 
 // LFRic 2D mesh types
-enum mesh2DTypes {unknownMesh, halfLevelFaceMesh, fullLevelFaceMesh};
+enum mesh2DTypes {unknownMesh, halfLevelEdgeMesh, halfLevelFaceMesh, fullLevelFaceMesh};
 
 // Dimension types for identifying field variable dimensions
 enum dimTypes {unknownAxisDim, horizontalAxisDim, verticalAxisDim,
                timeAxisDim, componentAxisDim};
+
+// Field data location on VTK grid
+enum fieldLocs {unknownFieldLoc, pointFieldLoc, cellFieldLoc};
 
 // Holds metadata for unstructured part of VTK grid
 struct UGRIDMeshDescription
@@ -33,11 +36,13 @@ struct UGRIDMeshDescription
 
   // Mesh dimensions
   size_t numNodes;
+  size_t numEdges;
   size_t numFaces;
   size_t numVertsPerFace;
 
   // NetCDF dimension names
   std::string nodeDim;
+  std::string edgeDim;
   std::string faceDim;
   std::string vertDim;
 
@@ -46,16 +51,18 @@ struct UGRIDMeshDescription
   std::string nodeCoordXVar;
   std::string nodeCoordYVar;
   std::string faceNodeConnVar;
+  std::string edgeCoordXVar;
+  std::string edgeCoordYVar;
 
   // Start index for face-node connectivity
   long long faceNodeStartIdx;
 
   UGRIDMeshDescription() : isLFRicXIOSFile(false), numTopologies(0),
-    meshType(unknownMesh), numNodes(0), numFaces(0), numVertsPerFace(0),
-    nodeDim("None"), faceDim("None"), vertDim("None"),
-    meshTopologyVar("None"), nodeCoordXVar("None"),
-    nodeCoordYVar("None"), faceNodeConnVar("None"),
-    faceNodeStartIdx(0) {}
+    meshType(unknownMesh), numNodes(0), numEdges(0), numFaces(0),
+    numVertsPerFace(0), nodeDim("None"), edgeDim("None"), faceDim("None"),
+    vertDim("None"), meshTopologyVar("None"), nodeCoordXVar("None"),
+    nodeCoordYVar("None"), faceNodeConnVar("None"), edgeCoordXVar("None"),
+    edgeCoordYVar("None"), faceNodeStartIdx(0) {}
 };
 
 // Holds metadata for vertical axis in VTK grid
@@ -98,6 +105,7 @@ struct DataField
 {
   bool active;
   mesh2DTypes meshType;
+  fieldLocs location;
   bool hasComponentDim;
   bool hasHorizontalDim;
   bool hasVerticalDim;
@@ -105,6 +113,7 @@ struct DataField
   std::vector<fieldDim> dims;
 
   DataField() : active(false), meshType(unknownMesh),
+    location(unknownFieldLoc),
     hasComponentDim(false), hasHorizontalDim(false),
     hasVerticalDim(false), hasTimeDim(false) {}
 };

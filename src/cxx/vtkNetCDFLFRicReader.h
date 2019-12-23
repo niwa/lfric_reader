@@ -52,11 +52,20 @@ public:
   void SetVerticalBias(const double value);
   vtkGetMacro(VerticalBias, double);
 
-  // ParaView interface for selecting data fields
+  // ParaView interface for choosing output mode
+  void SetOutputMode(const int status);
+  vtkGetMacro(OutputMode, int);
+
+  // ParaView interface for selecting cell and point data fields
   int GetNumberOfCellArrays();
   const char* GetCellArrayName(const int index);
   int GetCellArrayStatus(const char* name);
   void SetCellArrayStatus(const char* name, const int status);
+
+  int GetNumberOfPointArrays();
+  const char* GetPointArrayName(const int index);
+  int GetPointArrayStatus(const char* name);
+  void SetPointArrayStatus(const char* name, const int status);
 
 protected:
 
@@ -71,13 +80,19 @@ protected:
   int RequestData(vtkInformation *, vtkInformationVector **,
                   vtkInformationVector *) override;
 
-  // Build VTK grid from UGRID description
+  // Build full VTK grid from UGRID description
   int CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid,
                     const size_t startLevel, const size_t numLevels,
                     const size_t numGhostsAbove, const size_t numGhostsBelow);
 
+  // Points-only for W2 fields
+  int CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid,
+                      const size_t startLevel, const size_t numLevels,
+                      const size_t numGhostsAbove, const size_t numGhostsBelow);
+
   // Read selected field data from netCDF file and add to the VTK grid
   int LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid,
+                 const std::map<std::string, DataField> & fields,
                  const size_t timestep, const size_t startLevel,
                  const size_t numLevels);
 
@@ -89,7 +104,9 @@ private:
   char* FileName;
   int UseCartCoords, UseIndexAsVertCoord;
   double VerticalScale, VerticalBias;
-  std::map<std::string, DataField> Fields;
+  int OutputMode;
+  std::map<std::string, DataField> CellFields;
+  std::map<std::string, DataField> PointFields;
   std::vector<double> TimeSteps;
 
   UGRIDMeshDescription mesh2D;

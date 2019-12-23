@@ -358,6 +358,11 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 {
   UGRIDMeshDescription mesh2D = UGRIDMeshDescription();
 
+  // Edge descriptions currently need to be read from edge mesh (if available)
+  // due to an inconsistency in edge ordering of face and edge meshes.
+  bool hasHalfLevelEdgeMesh = false;
+  std::string meshTopologyVarEdge;
+
   // Look for UGRID 2D mesh description dummy variable,
   // must have attribute cf_role=mesh_topology
   // There can be several mesh descriptions in a file
@@ -379,6 +384,11 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
           mesh2D.meshType = fullLevelFaceMesh;
           // Workaround for non-CF-compliant vertical axis
           mesh2D.isLFRicXIOSFile = true;
+        }
+        else if (varName == "Mesh2d_edge_half_levels")
+        {
+          hasHalfLevelEdgeMesh = true;
+          meshTopologyVarEdge = varName;
         }
         // Assume that mesh is half-level type otherwise
         else if (mesh2D.meshTopologyVar.empty() and
@@ -492,6 +502,49 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   {
     mesh2D.faceNodeStartIdx = static_cast<long long>(
       this->GetAttInt(mesh2D.faceNodeConnVar, "start_index"));
+  }
+
+  //
+  // Get edge coordinate variables and their dimensions (if available)
+  //
+
+  if (hasHalfLevelEdgeMesh)
+  {
+    if (not this->VarHasAtt(meshTopologyVarEdge, "edge_coordinates"))
+    {
+      std::cerr << "GetMesh2DDescription: UGRID edge topology variable must have edge_coordinates attribute.\n";
+      return UGRIDMeshDescription();
+    }
+
+    std::vector<std::string> edgeCoordVarNames =
+      this->GetAttTextSplit(meshTopologyVarEdge, "edge_coordinates");
+
+    if (edgeCoordVarNames.size() != 2)
+    {
+      std::cerr << "GetMesh2DDescription: Expected 2 edge coordinate variables but received " <<
+                   edgeCoordVarNames.size() << ".\n";
+      return UGRIDMeshDescription();
+    }
+
+    // Longitude must be the "x axis" for consistency with face mesh
+    if (this->GetAttText(edgeCoordVarNames[0], "standard_name") == "latitude")
+    {
+      edgeCoordVarNames[0].swap(edgeCoordVarNames[1]);
+    }
+
+    if (this->GetAttText(edgeCoordVarNames[0], "standard_name") != "longitude" or
+        this->GetAttText(edgeCoordVarNames[1], "standard_name") != "latitude")
+    {
+      std::cerr << "GetMesh2DDescription: Edge coord variables must be named latitude/longitude.\n";
+      return UGRIDMeshDescription();
+    }
+
+    mesh2D.edgeCoordXVar = edgeCoordVarNames[0];
+    mesh2D.edgeCoordYVar = edgeCoordVarNames[1];
+
+    // Get edge dimension name and length
+    mesh2D.edgeDim = this->GetVarDimName(mesh2D.edgeCoordXVar, 0);
+    mesh2D.numEdges = this->GetDimLen(mesh2D.edgeDim);
   }
 
   return mesh2D;
@@ -615,6 +668,17 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
 
       const size_t numDims = this->GetVarNumDims(varName);
       fieldSpec.dims.resize(numDims);
+
+      // Set target field location in VTK grid - currently always cell data
+      // except for W2 fields which are defined on half-level edge meshes
+      if (horizontalMeshType == halfLevelEdgeMesh)
+      {
+        fieldSpec.location = pointFieldLoc;
+      }
+      else
+      {
+        fieldSpec.location = cellFieldLoc;
+      }
 
       // Determine stride in flat data array for each dimension to
       // flexibly recover the data in any dimension order

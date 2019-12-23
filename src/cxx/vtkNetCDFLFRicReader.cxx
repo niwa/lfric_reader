@@ -8,6 +8,7 @@
 #include <vtkDoubleArray.h>
 #include <vtkArrayDispatch.h>
 #include <vtkCellData.h>
+#include <vtkPointData.h>
 #include <vtkCellArray.h>
 #include <vtkUnsignedCharArray.h>
 #include <vtkDataSetAttributes.h>
@@ -33,8 +34,10 @@ vtkNetCDFLFRicReader::vtkNetCDFLFRicReader()
   this->UseIndexAsVertCoord = 0;
   this->VerticalScale = 1.0;
   this->VerticalBias = 1.0;
-  this->Fields.clear();
+  this->CellFields.clear();
+  this->PointFields.clear();
   this->TimeSteps.clear();
+  this->OutputMode = 0;
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader constructor" << endl);
 }
@@ -45,7 +48,8 @@ vtkNetCDFLFRicReader::~vtkNetCDFLFRicReader()
   vtkDebugMacro("Entering vtkNetCDFLFRicReader destructor..." << endl);
 
   this->SetFileName(nullptr);
-  this->Fields.clear();
+  this->CellFields.clear();
+  this->PointFields.clear();
   this->TimeSteps.clear();
 
   vtkDebugMacro("Finished vtkNetCDFLFRicReader destructor" << endl);
@@ -59,14 +63,24 @@ void vtkNetCDFLFRicReader::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "FileName: "
      << (this->FileName ? this->FileName : "(nullptr)") << endl;
 
+  os << indent << "OutputMode: "
+     << this->GetOutputMode() << endl;
+
   os << indent << "NumberOfTimeSteps: "
      << this->TimeSteps.size() << endl;
 
-  os << indent << "NumberOfFields: "
-     << this->Fields.size() << endl;
+  os << indent << "NumberOfCellFields: "
+     << this->CellFields.size() << endl;
+
+  os << indent << "NumberOfPointFields: "
+     << this->PointFields.size() << endl;
 
   os << indent << "NumberOfCellArrays: "
      << this->GetNumberOfCellArrays() << endl;
+
+  os << indent << "NumberOfPointArrays: "
+     << this->GetNumberOfPointArrays() << endl;
+
 }
 
 //----------------------------------------------------------------------------
@@ -149,17 +163,20 @@ int vtkNetCDFLFRicReader::RequestInformation(
   // otherwise accept only fields on the single mesh that is expected to be of half-level type
   if (mesh2D.isLFRicXIOSFile)
   {
-    inputFile.UpdateFieldMap(this->Fields, "face", "nMesh2d_half_levels_face", halfLevelFaceMesh,
+    inputFile.UpdateFieldMap(this->CellFields, "face", "nMesh2d_half_levels_face", halfLevelFaceMesh,
                              "half_levels", tAxis.axisDim);
-    inputFile.UpdateFieldMap(this->Fields, "face", "nMesh2d_full_levels_face", fullLevelFaceMesh,
+    inputFile.UpdateFieldMap(this->CellFields, "face", "nMesh2d_full_levels_face", fullLevelFaceMesh,
                              "full_levels", tAxis.axisDim);
+    inputFile.UpdateFieldMap(this->PointFields, "edge", "nMesh2d_edge_half_levels_edge", halfLevelEdgeMesh,
+                             "half_levels", tAxis.axisDim);
   }
   else
   {
-    inputFile.UpdateFieldMap(this->Fields, "face", mesh2D.faceDim, halfLevelFaceMesh,
+    inputFile.UpdateFieldMap(this->PointFields, "face", mesh2D.faceDim, halfLevelFaceMesh,
                              zAxis.axisDim, tAxis.axisDim);
   }
-  vtkDebugMacro("Number of fields found: " << this->Fields.size() << endl);
+  vtkDebugMacro("Number of cell fields found: " << this->CellFields.size() << endl);
+  vtkDebugMacro("Number of point fields found: " << this->PointFields.size() << endl);
 
   // Get VTK object for handing over time step information
   vtkInformation *outInfo = outputVector->GetInformationObject(0);
@@ -304,24 +321,52 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
     return 0;
   }
 
-  // Read UGRID description from file and create unstructured VTK grid
-  if (!this->CreateVTKGrid(inputFile, outputGrid,
-                           static_cast<size_t>(startLevel),
-                           static_cast<size_t>(numLevels),
-                           static_cast<size_t>(numGhostsAbove),
-                           static_cast<size_t>(numGhostsBelow)))
+  // Full VTK grid
+  if (this->OutputMode == 0)
   {
-    vtkErrorMacro("Could not create VTK grid." << endl);
-    return 0;
-  }
+    // Read UGRID description from file and create full unstructured VTK grid
+    if (!this->CreateVTKGrid(inputFile, outputGrid,
+                             static_cast<size_t>(startLevel),
+                             static_cast<size_t>(numLevels),
+                             static_cast<size_t>(numGhostsAbove),
+                             static_cast<size_t>(numGhostsBelow)))
+    {
+      vtkErrorMacro("Could not create VTK grid." << endl);
+      return 0;
+    }
 
-  // Load requested field data for requested time step
-  if (!this->LoadFields(inputFile, outputGrid, timestep,
-                        static_cast<size_t>(startLevel),
-                        static_cast<size_t>(numLevels)))
+    // Load requested field data for requested time step - currently only cell fields
+    if (!this->LoadFields(inputFile, outputGrid, this->CellFields,
+                          timestep,
+                          static_cast<size_t>(startLevel),
+                          static_cast<size_t>(numLevels)))
+    {
+      vtkErrorMacro("Could not load cell field data." << endl);
+      return 0;
+    }
+  }
+  // VTK points only for W2 visualisation
+  else if (this->OutputMode == 1)
   {
-    vtkErrorMacro("Could not load field data." << endl);
-    return 0;
+    if (!this->CreateVTKPoints(inputFile, outputGrid,
+                               static_cast<size_t>(startLevel),
+                               static_cast<size_t>(numLevels),
+                               static_cast<size_t>(numGhostsAbove),
+                               static_cast<size_t>(numGhostsBelow)))
+    {
+      vtkErrorMacro("Could not create VTK points." << endl);
+      return 0;
+    }
+
+    // Load W2 fields
+    if (!this->LoadFields(inputFile, outputGrid, this->PointFields,
+                          timestep,
+                          static_cast<size_t>(startLevel),
+                          static_cast<size_t>(numLevels)))
+    {
+      vtkErrorMacro("Could not load point field data." << endl);
+      return 0;
+    }
   }
 
   vtkDebugMacro("Finished RequestData" << endl);
@@ -526,8 +571,117 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 }
 
 //----------------------------------------------------------------------------
+int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid,
+                                          const size_t startLevel, const size_t numLevels,
+                                          const size_t numGhostsAbove, const size_t numGhostsBelow)
+{
+  vtkDebugMacro("Entering CreateVTKPoints..." << endl);
+
+  if (grid == nullptr)
+  {
+    vtkErrorMacro("Grid data structure is not available." << endl);
+    return 0;
+  }
+
+  this->SetProgressText("Creating VTK Points");
+  this->UpdateProgress(0.0);
+
+  std::vector<double> edge_coords_x = inputFile.GetVarDouble(this->mesh2D.edgeCoordXVar,
+                                                             {0}, {mesh2D.numEdges});
+
+  std::vector<double> edge_coords_y = inputFile.GetVarDouble(this->mesh2D.edgeCoordYVar,
+                                                             {0}, {mesh2D.numEdges});
+
+  //
+  // Determine vertical vertex heights
+  //
+
+  std::vector<double> levels;
+  if (this->UseIndexAsVertCoord or this->zAxis.numLevels == 1)
+  {
+    levels.resize(numLevels);
+    for (size_t idx = 0; idx < numLevels; idx++)
+    {
+      levels[idx] = static_cast<double>(startLevel + idx);
+      levels[idx] = this->VerticalScale*(levels[idx] + this->VerticalBias);
+    }
+  }
+  else if (this->mesh2D.meshType == fullLevelFaceMesh)
+  {
+    levels = inputFile.GetVarDouble(this->zAxis.axisVar,
+                                    {startLevel}, {numLevels+1});
+
+    // Compute half-level heights for points visualisation,
+    // last vector element is not needed
+    for (size_t idx = 0; idx < numLevels; idx++)
+    {
+      levels[idx] = 0.5*(levels[idx]+levels[idx+1]);
+      levels[idx] = this->VerticalScale*(levels[idx] + this->VerticalBias);
+    }
+    levels.resize(numLevels);
+  }
+  else
+  {
+    vtkErrorMacro("Cannot determine vertical vertex heights." << endl);
+    return 0;
+  }
+
+  this->UpdateProgress(0.5);
+
+  //
+  // Construct VTK grid points
+  //
+
+  vtkDebugMacro("Setting VTK points..." << endl);
+
+  vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+  points->SetNumberOfPoints(mesh2D.numEdges*numLevels);
+  vtkDataArray * pointLocs = points->GetData();
+
+  SetPointLocationWorker pointsWorker(edge_coords_x, edge_coords_y, levels,
+                                      this->UseCartCoords);
+  typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Reals> pointsDispatcher;
+  if (!pointsDispatcher::Execute(pointLocs, pointsWorker))
+  {
+    pointsWorker(pointLocs);
+  }
+
+  grid->SetPoints(points);
+
+  // Mark ghost points as "duplicate point"
+  if (numGhostsAbove > 0 || numGhostsBelow > 0)
+  {
+    grid->AllocatePointGhostArray();
+    vtkUnsignedCharArray * ghosts = grid->GetPointGhostArray();
+    vtkIdType pointId = 0;
+    for (size_t ilevel = 0; ilevel < numLevels; ilevel++)
+    {
+      if ((ilevel < numGhostsBelow) || (ilevel > (numLevels-numGhostsAbove-1)))
+      {
+        for (size_t iEdge = 0; iEdge < this->mesh2D.numEdges; iEdge++)
+        {
+          ghosts->SetValue(pointId, vtkDataSetAttributes::DUPLICATEPOINT);
+          pointId++;
+        }
+      }
+      else
+      {
+        pointId += this->mesh2D.numEdges;
+      }
+    }
+  }
+
+  this->UpdateProgress(1.0);
+
+  vtkDebugMacro("Finished CreateVTKPoints" << endl);
+
+  return 1;
+}
+
+//----------------------------------------------------------------------------
 // Read field data from netCDF file and add to the VTK grid
-int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid* grid,
+int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructuredGrid * grid,
+                                     const std::map<std::string, DataField> & fields,
                                      const size_t timestep, const size_t startLevel,
                                      const size_t numLevels)
 {
@@ -543,7 +697,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
   this->UpdateProgress(0.0);
 
   int fieldCount = 0;
-  for (std::pair<std::string, DataField> const &field : this->Fields)
+  for (std::pair<std::string, DataField> const &field : fields)
   {
     // Load variable?
     if (field.second.active)
@@ -651,14 +805,26 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
       // Create vtkDoubleArray for field data, vector components are stored separately
       vtkSmartPointer<vtkDoubleArray> dataField = vtkSmartPointer<vtkDoubleArray>::New();
       dataField->SetNumberOfComponents(numComponents);
-      dataField->SetNumberOfTuples(numLevels*this->mesh2D.numFaces);
       dataField->SetName(fieldName.c_str());
 
       // Sort data into VTK data structure
       switch(fieldSpec.meshType)
       {
+        case halfLevelEdgeMesh :
+          vtkDebugMacro("half level edge mesh: no interpolation needed" << endl);
+          dataField->SetNumberOfTuples(numLevels*this->mesh2D.numEdges);
+          for (size_t bufferIdx = 0; bufferIdx < read_buffer.size(); bufferIdx++)
+          {
+            const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
+            const size_t iVertical = bufferIdx/verticalStride % numLevels;
+            const size_t iComponent = bufferIdx/componentStride % numComponents;
+            const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
+            dataField->SetComponent(iCell, iComponent, read_buffer[bufferIdx]);
+          }
+          break;
         case halfLevelFaceMesh :
           vtkDebugMacro("half level face mesh: no interpolation needed" << endl);
+          dataField->SetNumberOfTuples(numLevels*this->mesh2D.numFaces);
           for (size_t bufferIdx = 0; bufferIdx < read_buffer.size(); bufferIdx++)
           {
             const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
@@ -670,6 +836,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
           break;
         case fullLevelFaceMesh :
           vtkDebugMacro("full level face mesh: averaging top and bottom faces" << endl);
+          dataField->SetNumberOfTuples(numLevels*this->mesh2D.numFaces);
           const size_t numLevelsFull = numLevels+1;
           for (size_t bufferIdx = 0; bufferIdx < read_buffer.size(); bufferIdx++)
           {
@@ -688,11 +855,22 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile& inputFile, vtkUnstructured
           break;
       }
 
-      grid->GetCellData()->AddArray(dataField);
+      if (fieldSpec.location == cellFieldLoc)
+      {
+        grid->GetCellData()->AddArray(dataField);
+      }
+      else if (fieldSpec.location == pointFieldLoc)
+      {
+        grid->GetPointData()->AddArray(dataField);
+      }
+      else
+      {
+        vtkDebugMacro("Unknown location for field " << fieldName << endl);
+      }
 
       fieldCount++;
       this->UpdateProgress(static_cast<float>(fieldCount)/
-                           static_cast<float>(this->Fields.size()));
+                           static_cast<float>(fields.size()));
     }
   }
 
@@ -737,9 +915,17 @@ void vtkNetCDFLFRicReader::SetVerticalBias(const double value)
 
 //----------------------------------------------------------------------------
 
+void vtkNetCDFLFRicReader::SetOutputMode(const int mode)
+{
+  this->OutputMode = mode;
+  this->Modified();
+}
+
+//----------------------------------------------------------------------------
+
 int vtkNetCDFLFRicReader::GetNumberOfCellArrays()
 {
-  return this->Fields.size();
+  return this->CellFields.size();
 }
 
 //----------------------------------------------------------------------------
@@ -751,7 +937,7 @@ const char* vtkNetCDFLFRicReader::GetCellArrayName(const int index)
   // shouldn't contain too many arrays, so we'll simply count map keys.
   int counter = 0;
   std::map<std::string, DataField>::const_iterator it;
-  for (it = this->Fields.begin(); it != this->Fields.end();
+  for (it = this->CellFields.begin(); it != this->CellFields.end();
        it++, counter++)
   {
     if (counter == index)
@@ -769,8 +955,8 @@ const char* vtkNetCDFLFRicReader::GetCellArrayName(const int index)
 int vtkNetCDFLFRicReader::GetCellArrayStatus(const char* name)
 {
   int status;
-  std::map<std::string, DataField>::const_iterator it = this->Fields.find(name);
-  if (it != this->Fields.end())
+  std::map<std::string, DataField>::const_iterator it = this->CellFields.find(name);
+  if (it != this->CellFields.end())
   {
     status = static_cast<int>(it->second.active);
   }
@@ -786,8 +972,8 @@ int vtkNetCDFLFRicReader::GetCellArrayStatus(const char* name)
 
 void vtkNetCDFLFRicReader::SetCellArrayStatus(const char* name, const int status)
 {
-  std::map<std::string, DataField>::iterator it = this->Fields.find(name);
-  if (it != this->Fields.end())
+  std::map<std::string, DataField>::iterator it = this->CellFields.find(name);
+  if (it != this->CellFields.end())
   {
     it->second.active = static_cast<bool>(status);
     this->Modified();
@@ -796,5 +982,66 @@ void vtkNetCDFLFRicReader::SetCellArrayStatus(const char* name, const int status
   {
     // Ignore unknown names
     vtkDebugMacro("SetCellArrayStatus: no array with name=" << name << endl);
+  }
+}
+
+//----------------------------------------------------------------------------
+
+int vtkNetCDFLFRicReader::GetNumberOfPointArrays()
+{
+  return this->PointFields.size();
+}
+
+//----------------------------------------------------------------------------
+
+const char* vtkNetCDFLFRicReader::GetPointArrayName(const int index)
+{
+  int counter = 0;
+  std::map<std::string, DataField>::const_iterator it;
+  for (it = this->PointFields.begin(); it != this->PointFields.end();
+       it++, counter++)
+  {
+    if (counter == index)
+    {
+      return it->first.c_str();
+    }
+  }
+  vtkDebugMacro("GetPointArrayName: out of range index=" << index << endl);
+  return nullptr;
+
+}
+
+//----------------------------------------------------------------------------
+
+int vtkNetCDFLFRicReader::GetPointArrayStatus(const char* name)
+{
+  int status;
+  std::map<std::string, DataField>::const_iterator it = this->PointFields.find(name);
+  if (it != this->PointFields.end())
+  {
+    status = static_cast<int>(it->second.active);
+  }
+  else
+  {
+    status = 0;
+    vtkDebugMacro("GetPointArrayStatus: no array with name=" << name << endl);
+  }
+  return status;
+}
+
+//----------------------------------------------------------------------------
+
+void vtkNetCDFLFRicReader::SetPointArrayStatus(const char* name, const int status)
+{
+  std::map<std::string, DataField>::iterator it = this->PointFields.find(name);
+  if (it != this->PointFields.end())
+  {
+    it->second.active = static_cast<bool>(status);
+    this->Modified();
+  }
+  else
+  {
+    // Ignore unknown names
+    vtkDebugMacro("SetPointArrayStatus: no array with name=" << name << endl);
   }
 }

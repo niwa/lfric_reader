@@ -13,7 +13,8 @@
         name="FileName"
         command="SetFileName"
         animateable="0"
-        number_of_elements="1">
+        number_of_elements="1"
+        panel_visibility="never">
         <FileListDomain name="files"/>
         <Documentation>
           This property specifies the netCDF file name for the LFRic reader.
@@ -73,6 +74,21 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetOutputMode"
+                         default_values="0"
+                         name="OutputMode"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Full grid"
+                 value="0" />
+          <Entry text="Points only (W2 fields)"
+                 value="1" />
+        </EnumerationDomain>
+        <Documentation>
+          Generate full VTK grid, or only mid-edge points for visualising W2 fields.
+        </Documentation>
+      </IntVectorProperty>
+
       <StringVectorProperty name="CellArrayInfo"
                             information_only="1">
         <ArraySelectionInformationHelper attribute_name="Cell"/>
@@ -91,8 +107,44 @@
           </RequiredProperties>
         </ArraySelectionDomain>
         <Documentation>
-          List of fields (cell arrays) in the LFRic input file.
+          List of cell fields in the LFRic input file, unavailable in points-only output mode.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="OutputMode"
+                                   value="0"/>
+          <!-- disable this depending on SetOutputMode -->
+        </Hints>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="PointArrayInfo"
+                            information_only="1">
+        <ArraySelectionInformationHelper attribute_name="Point"/>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="PointArrayStatus"
+                            command="SetPointArrayStatus"
+                            number_of_elements="2"
+                            repeat_command="1"
+                            number_of_elements_per_command="2"
+                            element_types="2 0"
+                            information_property="PointArrayInfo" >
+        <ArraySelectionDomain name="array_list" >
+          <RequiredProperties>
+            <Property name="PointArrayInfo" function="ArrayList"/>
+          </RequiredProperties>
+        </ArraySelectionDomain>
+        <Documentation>
+          List of point fields in the LFRic input file, currently only available in points-only output mode.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="OutputMode"
+                                   value="1"/>
+          <!-- disable this depending on SetOutputMode -->
+        </Hints>
       </StringVectorProperty>
 
       <Hints>
