@@ -682,16 +682,21 @@ void generate_testfile(const bool valid)
   count2[1] = levelsLen;
   varData.resize(count2[0]*count2[1]);
 
-  // Store dimensions
-  varData[0] = static_cast<double>(nMesh2dFullLevelsEdgeLen);
-  varData[1] = static_cast<double>(levelsLen);
-  varData[2] = static_cast<double>(componentLen);
-
   // Fill array with number sequence to test ordering
-  for (size_t idx = 3; idx < varData.size(); idx++)
+  for (size_t iLevel = 0; iLevel < levelsLen; iLevel++)
   {
-    varData[idx] = static_cast<double>(idx);
+    for (size_t iEdge = 0; iEdge < nMesh2dEdgeHalfLevelsEdgeLen; iEdge++)
+    {
+      const size_t iCell = iLevel*nMesh2dEdgeHalfLevelsEdgeLen+iEdge;
+      varData[iEdge*levelsLen+iLevel] = static_cast<double>(iCell);
+    }
   }
+
+  // Store dimensions in the first 3 cells
+  varData[0] = static_cast<double>(nMesh2dEdgeHalfLevelsEdgeLen);
+  varData[levelsLen] = static_cast<double>(levelsLen);
+  varData[2*levelsLen] = static_cast<double>(componentLen);
+
   ncErrorMacro(nc_put_vara_double(ncId, var4Id, start2, count2, varData.data()));
 
   ncErrorMacro(nc_close(ncId));

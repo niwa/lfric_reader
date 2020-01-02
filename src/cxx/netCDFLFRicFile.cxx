@@ -385,7 +385,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
           // Workaround for non-CF-compliant vertical axis
           mesh2D.isLFRicXIOSFile = true;
         }
-        // Edge-half-level mesh in LFRic output files current has
+        // Edge-half-level mesh in LFRic output files currently has
         // topology_dimension=2
         else if (varName == "Mesh2d_edge_half_levels" and
                  this->GetAttInt(varName, "topology_dimension") == 2)

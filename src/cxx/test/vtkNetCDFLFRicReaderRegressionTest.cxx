@@ -138,12 +138,26 @@ TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
     REQUIRE( grid->GetNumberOfPoints() == 108*3 );
   }
 
-  SECTION( "Grid Does Not Contain Cells" )
+  SECTION( "GetNumberOfCells Returns Correct Number" )
   {
-    REQUIRE( grid->GetNumberOfCells() == 0 );
+    REQUIRE( grid->GetNumberOfCells() == grid->GetNumberOfPoints() );
     reader->SetUseCartCoords(1);
     reader->Update();
-    REQUIRE( grid->GetNumberOfCells() == 0 );
+    REQUIRE( grid->GetNumberOfCells() == grid->GetNumberOfPoints() );
+  }
+
+  SECTION( "Lon-Lat-Rad Grid Only Contains VTK_VERTEX Cells")
+  {
+    REQUIRE( grid->IsHomogeneous() == 1 );
+    REQUIRE( grid->GetCellType(0) == VTK_VERTEX );
+  }
+
+  SECTION( "XYZ Grid Only Contains VTK_VERTEX Cells")
+  {
+    reader->SetUseCartCoords(1);
+    reader->Update();
+    REQUIRE( grid->IsHomogeneous() == 1 );
+    REQUIRE( grid->GetCellType(0) == VTK_VERTEX );
   }
 
   SECTION ("Horizontal Lon-Lat-Rad Bounds Are Correct")
@@ -164,7 +178,8 @@ TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
     reader->Update();
     double gridBounds[6];
     grid->GetBounds(gridBounds);
-    // This test currently fails due to small deviation
+    // This test currently fails as edges are not mirrored,
+    // which leads to a slight asymmetry
     // REQUIRE( gridBounds[1] == Approx(-gridBounds[0]) );
     REQUIRE( gridBounds[3] == Approx(-gridBounds[2]) );
     REQUIRE( gridBounds[5] == Approx(-gridBounds[4]) );
@@ -368,7 +383,7 @@ TEST_CASE( "Point Data Fields", "[regression]" )
     vtkDoubleArray * dataArray = vtkDoubleArray::SafeDownCast(
       grid->GetPointData()->GetArray(0));
 
-    // Retrieve dimensions
+    // Retrieve dimensions from the first cells
     const vtkIdType edgeLen = static_cast<vtkIdType>(dataArray->GetComponent(0, 0));
     const vtkIdType levelsLen = static_cast<vtkIdType>(dataArray->GetComponent(1, 0));
     const vtkIdType componentLen = static_cast<vtkIdType>(dataArray->GetComponent(2, 0));
@@ -378,9 +393,9 @@ TEST_CASE( "Point Data Fields", "[regression]" )
 
     // Check remaining field data
     bool valid = true;
-    for (vtkIdType idx = 3; idx < edgeLen*levelsLen; idx++)
+    for (vtkIdType iCell = 3; iCell < edgeLen*levelsLen; iCell++)
     {
-      valid &= static_cast<vtkIdType>(dataArray->GetComponent(idx, 0)) == idx;
+      valid &= static_cast<vtkIdType>(dataArray->GetComponent(iCell, 0)) == iCell;
     }
     REQUIRE( valid == true );
   }

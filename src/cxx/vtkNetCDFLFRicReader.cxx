@@ -626,7 +626,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
     return 0;
   }
 
-  this->UpdateProgress(0.5);
+  this->UpdateProgress(0.33);
 
   //
   // Construct VTK grid points
@@ -648,25 +648,41 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
 
   grid->SetPoints(points);
 
-  // Mark ghost points as "duplicate point"
+  this->UpdateProgress(0.66);
+
+  //
+  // Construct VTK cells
+  //
+
+  vtkDebugMacro("Setting VTK Cells..." << endl);
+
+  // Cells are just single points ("VTK_VERTEX")
+  grid->Allocate(grid->GetNumberOfPoints());
+  for (vtkIdType pointId = 0; pointId < grid->GetNumberOfPoints(); pointId++)
+  {
+    vtkIdType pointIds[] = {pointId};
+    grid->InsertNextCell(VTK_VERTEX, 1, pointIds);
+  }
+
+  // Mark ghost cells as "duplicate cell"
   if (numGhostsAbove > 0 || numGhostsBelow > 0)
   {
-    grid->AllocatePointGhostArray();
-    vtkUnsignedCharArray * ghosts = grid->GetPointGhostArray();
-    vtkIdType pointId = 0;
+    grid->AllocateCellGhostArray();
+    vtkUnsignedCharArray * ghosts = grid->GetCellGhostArray();
+    vtkIdType cellId = 0;
     for (size_t ilevel = 0; ilevel < numLevels; ilevel++)
     {
       if ((ilevel < numGhostsBelow) || (ilevel > (numLevels-numGhostsAbove-1)))
       {
         for (size_t iEdge = 0; iEdge < this->mesh2D.numEdges; iEdge++)
         {
-          ghosts->SetValue(pointId, vtkDataSetAttributes::DUPLICATEPOINT);
-          pointId++;
+          ghosts->SetValue(cellId, vtkDataSetAttributes::DUPLICATECELL);
+          cellId++;
         }
       }
       else
       {
-        pointId += this->mesh2D.numEdges;
+        cellId += this->mesh2D.numEdges;
       }
     }
   }

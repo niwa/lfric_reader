@@ -81,11 +81,11 @@
         <EnumerationDomain name="enum">
           <Entry text="Full grid"
                  value="0" />
-          <Entry text="Points only (W2 fields)"
+          <Entry text="Face-centre points"
                  value="1" />
         </EnumerationDomain>
         <Documentation>
-          Generate full VTK grid, or only mid-edge points for visualising W2 fields.
+          Generate full VTK grid, or only face-centre points for visualising horizontal W2 fields.
         </Documentation>
       </IntVectorProperty>
 
