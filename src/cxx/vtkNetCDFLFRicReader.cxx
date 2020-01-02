@@ -144,7 +144,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
 
   // Look for UGRID horizontal unstructured mesh
   this->mesh2D = inputFile.GetMesh2DDescription();
-  if (mesh2D.numTopologies == 0)
+  if (this->mesh2D.numTopologies == 0)
   {
     vtkErrorMacro("Failed to determine 2D UGRID mesh description." << endl);
     return 0;
@@ -161,7 +161,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
 
   // If this is an LFRic output file, add fields that are defined on all supported meshes,
   // otherwise accept only fields on the single mesh that is expected to be of half-level type
-  if (mesh2D.isLFRicXIOSFile)
+  if (this->mesh2D.isLFRicXIOSFile)
   {
     inputFile.UpdateFieldMap(this->CellFields, "face", "nMesh2d_half_levels_face", halfLevelFaceMesh,
                              "half_levels", tAxis.axisDim);
@@ -172,7 +172,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
   }
   else
   {
-    inputFile.UpdateFieldMap(this->PointFields, "face", mesh2D.faceDim, halfLevelFaceMesh,
+    inputFile.UpdateFieldMap(this->PointFields, "face", this->mesh2D.faceDim, halfLevelFaceMesh,
                              zAxis.axisDim, tAxis.axisDim);
   }
   vtkDebugMacro("Number of cell fields found: " << this->CellFields.size() << endl);
@@ -399,10 +399,10 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   //
 
   std::vector<double> node_coords_x = inputFile.GetVarDouble(this->mesh2D.nodeCoordXVar,
-                                                             {0}, {mesh2D.numNodes});
+                                                             {0}, {this->mesh2D.numNodes});
 
   std::vector<double> node_coords_y = inputFile.GetVarDouble(this->mesh2D.nodeCoordYVar,
-                                                             {0}, {mesh2D.numNodes});
+                                                             {0}, {this->mesh2D.numNodes});
 
   std::vector<long long> face_nodes = inputFile.GetVarLongLong(
                          this->mesh2D.faceNodeConnVar,
@@ -587,10 +587,10 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   this->UpdateProgress(0.0);
 
   std::vector<double> edge_coords_x = inputFile.GetVarDouble(this->mesh2D.edgeCoordXVar,
-                                                             {0}, {mesh2D.numEdges});
+                                                             {0}, {this->mesh2D.numEdges});
 
   std::vector<double> edge_coords_y = inputFile.GetVarDouble(this->mesh2D.edgeCoordYVar,
-                                                             {0}, {mesh2D.numEdges});
+                                                             {0}, {this->mesh2D.numEdges});
 
   //
   // Determine vertical vertex heights
@@ -626,7 +626,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
     return 0;
   }
 
-  this->UpdateProgress(0.5);
+  this->UpdateProgress(0.33);
 
   //
   // Construct VTK grid points
@@ -635,7 +635,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   vtkDebugMacro("Setting VTK points..." << endl);
 
   vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
-  points->SetNumberOfPoints(mesh2D.numEdges*numLevels);
+  points->SetNumberOfPoints(this->mesh2D.numEdges*numLevels);
   vtkDataArray * pointLocs = points->GetData();
 
   SetPointLocationWorker pointsWorker(edge_coords_x, edge_coords_y, levels,
@@ -648,25 +648,41 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
 
   grid->SetPoints(points);
 
-  // Mark ghost points as "duplicate point"
+  this->UpdateProgress(0.66);
+
+  //
+  // Construct VTK cells
+  //
+
+  vtkDebugMacro("Setting VTK Cells..." << endl);
+
+  // Cells are just single points ("VTK_VERTEX")
+  grid->Allocate(grid->GetNumberOfPoints());
+  for (vtkIdType pointId = 0; pointId < grid->GetNumberOfPoints(); pointId++)
+  {
+    vtkIdType pointIds[] = {pointId};
+    grid->InsertNextCell(VTK_VERTEX, 1, pointIds);
+  }
+
+  // Mark ghost cells as "duplicate cell"
   if (numGhostsAbove > 0 || numGhostsBelow > 0)
   {
-    grid->AllocatePointGhostArray();
-    vtkUnsignedCharArray * ghosts = grid->GetPointGhostArray();
-    vtkIdType pointId = 0;
+    grid->AllocateCellGhostArray();
+    vtkUnsignedCharArray * ghosts = grid->GetCellGhostArray();
+    vtkIdType cellId = 0;
     for (size_t ilevel = 0; ilevel < numLevels; ilevel++)
     {
       if ((ilevel < numGhostsBelow) || (ilevel > (numLevels-numGhostsAbove-1)))
       {
         for (size_t iEdge = 0; iEdge < this->mesh2D.numEdges; iEdge++)
         {
-          ghosts->SetValue(pointId, vtkDataSetAttributes::DUPLICATEPOINT);
-          pointId++;
+          ghosts->SetValue(cellId, vtkDataSetAttributes::DUPLICATECELL);
+          cellId++;
         }
       }
       else
       {
-        pointId += this->mesh2D.numEdges;
+        cellId += this->mesh2D.numEdges;
       }
     }
   }

@@ -385,7 +385,10 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
           // Workaround for non-CF-compliant vertical axis
           mesh2D.isLFRicXIOSFile = true;
         }
-        else if (varName == "Mesh2d_edge_half_levels")
+        // Edge-half-level mesh in LFRic output files currently has
+        // topology_dimension=2
+        else if (varName == "Mesh2d_edge_half_levels" and
+                 this->GetAttInt(varName, "topology_dimension") == 2)
         {
           hasHalfLevelEdgeMesh = true;
           meshTopologyVarEdge = varName;
@@ -556,6 +559,7 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
                                                     const mesh2DTypes meshType)
 {
   CFVerticalAxis levels = CFVerticalAxis();
+  levels.axisVar.clear();
 
   // Workaround for LFRic XIOS output files where vertical axes do not have
   // attributes required by CF convention
@@ -579,7 +583,6 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
   // Restrict choices to "level_height" and "model_level_number"
   else
   {
-    levels.axisVar.clear();
     for (std::string const &varName : this->GetVarNames())
     {
       if (this->VarHasAtt(varName, "positive"))
@@ -599,7 +602,8 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
   // Assume 2D-only file and set vertical axis to single level if no axis found
   if (levels.axisVar.empty())
   {
-    levels.axisDim.clear();
+    levels.axisVar = "None";
+    levels.axisDim = "None";
     levels.numLevels = 1;
   }
 

@@ -53,11 +53,15 @@ TEST_CASE( "Basic Class Tests", "[basic]" )
     REQUIRE( result == Approx(1.23456) );
   }
 
-  SECTION( "SetVerticalBias/GetVerticalBias Methods" )
+  SECTION( "SetOutputMode/GetOutputMode Methods" )
   {
-    reader->SetVerticalBias(1.23456);
-    const double result = reader->GetVerticalBias();
-    REQUIRE( result == Approx(1.23456) );
+    reader->SetOutputMode(1);
+    int result = reader->GetOutputMode();
+    REQUIRE( result == 1 );
+
+    reader->SetOutputMode(0);
+    result = reader->GetOutputMode();
+    REQUIRE( result == 0 );
   }
 
   reader->Delete();
@@ -229,6 +233,144 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
     {
       const char* arrayname = reader->GetCellArrayName(iarray);
       const int result = reader->GetCellArrayStatus(arrayname);
+      REQUIRE( result == 0 );
+    }
+  }
+
+  reader->Delete();
+
+}
+
+// ------------------------------------------------------------------------------------------
+
+TEST_CASE( "GetNumberOfPointArrays Method", "[paraview_interface]" )
+{
+
+  vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
+
+  SECTION( "No file loaded" )
+  {
+    const int result = reader->GetNumberOfPointArrays();
+    REQUIRE( result == 0 );
+  }
+
+  SECTION( "File loaded" )
+  {
+    reader->SetFileName("testdata_valid.nc");
+    reader->Update();
+    const int result = reader->GetNumberOfPointArrays();
+    REQUIRE( result == 1 );
+  }
+
+  reader->Delete();
+
+}
+
+// ------------------------------------------------------------------------------------------
+
+TEST_CASE( "GetPointArrayName Method", "[paraview_interface]" )
+{
+
+  vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
+
+  SECTION( "Invalid Index (negative)" )
+  {
+    reader->SetFileName("testdata_valid.nc");
+    reader->Update();
+    const char* result = reader->GetPointArrayName(-1);
+    REQUIRE( result == nullptr );
+  }
+
+  SECTION( "Invalid Index (too large)" )
+  {
+    reader->SetFileName("testdata_valid.nc");
+    reader->Update();
+    const char* result = reader->GetPointArrayName(100);
+    REQUIRE( result == nullptr );
+  }
+
+  SECTION( "Valid Index" )
+  {
+    reader->SetFileName("testdata_valid.nc");
+    reader->Update();
+    const std::string result(reader->GetPointArrayName(0));
+    REQUIRE( result == "var4" );
+  }
+
+  reader->Delete();
+
+}
+
+// ------------------------------------------------------------------------------------------
+
+TEST_CASE( "SetPointArrayStatus/GetPointArrayStatus Methods", "[paraview_interface]" )
+{
+
+  vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
+
+  SECTION( "GetPointArrayStatus with Invalid Array Name" )
+  {
+    reader->SetFileName("testdata_valid.nc");
+    reader->Update();
+    const int result = reader->GetPointArrayStatus("thisfielddoesnotexist");
+    REQUIRE( result == 0 );
+  }
+
+  SECTION( "GetPointArrayStatus Default Status" )
+  {
+    reader->SetFileName("testdata_valid.nc");
+    reader->Update();
+    for (int iarray = 0; iarray < reader->GetNumberOfPointArrays(); iarray++)
+    {
+      const char* arrayname = reader->GetPointArrayName(iarray);
+      const int result = reader->GetPointArrayStatus(arrayname);
+      REQUIRE( result == 0 );
+    }
+  }
+
+  SECTION( "SetPointArrayStatus with Invalid Array Name" )
+  {
+    reader->SetFileName("testdata_valid.nc");
+    reader->Update();
+    reader->SetPointArrayStatus("thisfielddoesnotexist",1);
+    // Check if this has affected the status any of the existing arrays
+    for (int iarray = 0; iarray < reader->GetNumberOfPointArrays(); iarray++)
+    {
+      const char* arrayname = reader->GetPointArrayName(iarray);
+      const int result = reader->GetPointArrayStatus(arrayname);
+      REQUIRE( result == 0 );
+    }
+  }
+
+  SECTION( "SetPointArrayStatus with Valid Array Name" )
+  {
+    reader->SetFileName("testdata_valid.nc");
+    reader->Update();
+
+    const int testarrayidx = 0;
+    const char* testarrayname = reader->GetPointArrayName(testarrayidx);
+
+    // Check that only status of the first array has been set
+    reader->SetPointArrayStatus(testarrayname,1);
+    for (int iarray = 0; iarray < reader->GetNumberOfPointArrays(); iarray++)
+    {
+      const char* arrayname = reader->GetPointArrayName(iarray);
+      const int result = reader->GetPointArrayStatus(arrayname);
+      if (iarray == testarrayidx)
+      {
+        REQUIRE( result == 1 );
+      }
+      else
+      {
+        REQUIRE( result == 0 );
+      }
+    }
+
+    reader->SetPointArrayStatus(testarrayname,0);
+    for (int iarray = 0; iarray < reader->GetNumberOfPointArrays(); iarray++)
+    {
+      const char* arrayname = reader->GetPointArrayName(iarray);
+      const int result = reader->GetPointArrayStatus(arrayname);
       REQUIRE( result == 0 );
     }
   }

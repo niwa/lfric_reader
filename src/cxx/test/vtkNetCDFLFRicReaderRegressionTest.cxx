@@ -8,7 +8,7 @@
 
 // ------------------------------------------------------------------------------------------
 
-TEST_CASE( "UnstructuredGrid Properties", "[regression]" )
+TEST_CASE( "UnstructuredGrid Properties - Full Grid", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
@@ -120,7 +120,120 @@ TEST_CASE( "UnstructuredGrid Properties", "[regression]" )
 
 // ------------------------------------------------------------------------------------------
 
-TEST_CASE( "Data Fields", "[regression]" )
+TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
+{
+
+  vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
+  reader->SetFileName("testdata_valid.nc");
+  reader->SetOutputMode(1);
+  reader->Update();
+  vtkUnstructuredGrid * grid = reader->GetOutput();
+
+  SECTION( "GetNumberOfPoints Returns Correct Numbers" )
+  {
+    // Points are currently NOT replicated for periodic grid
+    REQUIRE( grid->GetNumberOfPoints() == 108*3 );
+    reader->SetUseCartCoords(1);
+    reader->Update();
+    REQUIRE( grid->GetNumberOfPoints() == 108*3 );
+  }
+
+  SECTION( "GetNumberOfCells Returns Correct Number" )
+  {
+    REQUIRE( grid->GetNumberOfCells() == grid->GetNumberOfPoints() );
+    reader->SetUseCartCoords(1);
+    reader->Update();
+    REQUIRE( grid->GetNumberOfCells() == grid->GetNumberOfPoints() );
+  }
+
+  SECTION( "Lon-Lat-Rad Grid Only Contains VTK_VERTEX Cells")
+  {
+    REQUIRE( grid->IsHomogeneous() == 1 );
+    REQUIRE( grid->GetCellType(0) == VTK_VERTEX );
+  }
+
+  SECTION( "XYZ Grid Only Contains VTK_VERTEX Cells")
+  {
+    reader->SetUseCartCoords(1);
+    reader->Update();
+    REQUIRE( grid->IsHomogeneous() == 1 );
+    REQUIRE( grid->GetCellType(0) == VTK_VERTEX );
+  }
+
+  SECTION ("Horizontal Lon-Lat-Rad Bounds Are Correct")
+  {
+    double gridBounds[6];
+    grid->GetBounds(gridBounds);
+    // Longitude bounds should add up to 360 degrees
+    REQUIRE( (gridBounds[0] + gridBounds[1]) == Approx(360.0) );
+    // Latitude bounds are symmetric
+    REQUIRE( gridBounds[3] == Approx(-gridBounds[2]) );
+    // Vertical bounds must not be symmetric
+    REQUIRE( gridBounds[5] != Approx(-gridBounds[4]) );
+  }
+
+  SECTION ("XYZ Bounds Are Symmetric")
+  {
+    reader->SetUseCartCoords(1);
+    reader->Update();
+    double gridBounds[6];
+    grid->GetBounds(gridBounds);
+    // This test currently fails as edges are not mirrored,
+    // which leads to a slight asymmetry
+    // REQUIRE( gridBounds[1] == Approx(-gridBounds[0]) );
+    REQUIRE( gridBounds[3] == Approx(-gridBounds[2]) );
+    REQUIRE( gridBounds[5] == Approx(-gridBounds[4]) );
+  }
+
+  SECTION ("Vertical Bounds Are Correct")
+  {
+    double gridBounds[6];
+    grid->GetBounds(gridBounds);
+    REQUIRE( gridBounds[4] == Approx(1.25) );
+    REQUIRE( gridBounds[5] == Approx(2.25) );
+  }
+
+  SECTION ("Using Index As Vertical Coordinate Works")
+  {
+    double gridBounds[6];
+    reader->SetUseIndexAsVertCoord(1);
+    reader->Update();
+    grid->GetBounds(gridBounds);
+    REQUIRE( gridBounds[4] == Approx(1.0) );
+    REQUIRE( gridBounds[5] == Approx(3.0) );
+  }
+
+  SECTION ("Setting Vertical Bias Works")
+  {
+    const double verticalBias = 3.7;
+    reader->SetUseIndexAsVertCoord(1);
+    reader->SetVerticalBias(verticalBias);
+    reader->Update();
+    double gridBounds[6];
+    grid->GetBounds(gridBounds);
+    REQUIRE( gridBounds[4] == Approx(verticalBias) );
+    REQUIRE( gridBounds[5] == Approx(verticalBias+2.0) );
+  }
+
+  SECTION ("Setting Vertical Scale Works")
+  {
+    const double verticalScale = 9.17;
+    reader->SetUseIndexAsVertCoord(1);
+    reader->SetVerticalScale(verticalScale);
+    reader->Update();
+    double gridBounds[6];
+    grid->GetBounds(gridBounds);
+    REQUIRE( gridBounds[4] == Approx(verticalScale) );
+    REQUIRE( gridBounds[5] == Approx(3.0*verticalScale) );
+  }
+
+  reader->Delete();
+
+}
+
+// ------------------------------------------------------------------------------------------
+
+TEST_CASE( "Cell Data Fields", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
@@ -229,6 +342,62 @@ TEST_CASE( "Data Fields", "[regression]" )
     }
     REQUIRE( valid == true );
 
+  }
+
+  reader->Delete();
+
+}
+
+TEST_CASE( "Point Data Fields", "[regression]" )
+{
+
+  vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
+  reader->SetFileName("testdata_valid.nc");
+  reader->SetOutputMode(1);
+  reader->Update();
+  reader->SetPointArrayStatus("var4",1);
+  reader->Update();
+  vtkUnstructuredGrid * grid = reader->GetOutput();
+
+  SECTION( "No Cell Data Arrays Are Available" )
+  {
+    REQUIRE( grid->GetCellData()->GetNumberOfArrays() == 0 );
+  }
+
+  SECTION( "Correct Number Of Point Data Arrays Are Read" )
+  {
+    REQUIRE( grid->GetPointData()->GetNumberOfArrays() == 1 );
+  }
+
+  SECTION( "Arrays Have Correct Number Of Components" )
+  {
+    REQUIRE( grid->GetPointData()->GetArray(0)->GetNumberOfComponents() == 1 );
+  }
+
+  SECTION( "Point Data Fields Have Correct Contents" )
+  {
+    //
+    // First field - test 3D cell ordering
+    //
+
+    vtkDoubleArray * dataArray = vtkDoubleArray::SafeDownCast(
+      grid->GetPointData()->GetArray(0));
+
+    // Retrieve dimensions from the first cells
+    const vtkIdType edgeLen = static_cast<vtkIdType>(dataArray->GetComponent(0, 0));
+    const vtkIdType levelsLen = static_cast<vtkIdType>(dataArray->GetComponent(1, 0));
+    const vtkIdType componentLen = static_cast<vtkIdType>(dataArray->GetComponent(2, 0));
+
+    // Check data array size
+    REQUIRE( dataArray->GetNumberOfTuples() == edgeLen*levelsLen );
+
+    // Check remaining field data
+    bool valid = true;
+    for (vtkIdType iCell = 3; iCell < edgeLen*levelsLen; iCell++)
+    {
+      valid &= static_cast<vtkIdType>(dataArray->GetComponent(iCell, 0)) == iCell;
+    }
+    REQUIRE( valid == true );
   }
 
   reader->Delete();
