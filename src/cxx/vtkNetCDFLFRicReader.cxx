@@ -398,22 +398,22 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   // Load node coordinates and face-node connectivities
   //
 
-  std::vector<double> node_coords_x = inputFile.GetVarDouble(this->mesh2D.nodeCoordXVar,
+  std::vector<double> nodeCoordsX = inputFile.GetVarDouble(this->mesh2D.nodeCoordXVar,
                                                              {0}, {this->mesh2D.numNodes});
 
-  std::vector<double> node_coords_y = inputFile.GetVarDouble(this->mesh2D.nodeCoordYVar,
+  std::vector<double> nodeCoordsY = inputFile.GetVarDouble(this->mesh2D.nodeCoordYVar,
                                                              {0}, {this->mesh2D.numNodes});
 
-  std::vector<long long> face_nodes = inputFile.GetVarLongLong(
+  std::vector<long long> faceNodes = inputFile.GetVarLongLong(
                          this->mesh2D.faceNodeConnVar,
                          {0,0}, {this->mesh2D.numFaces, this->mesh2D.numVertsPerFace});
 
   // Correct node IDs if non-zero start index
   if (this->mesh2D.faceNodeStartIdx != 0)
   {
-    for (size_t idx = 0; idx < face_nodes.size(); idx++)
+    for (size_t idx = 0; idx < faceNodes.size(); idx++)
     {
-      face_nodes[idx] -= this->mesh2D.faceNodeStartIdx;
+      faceNodes[idx] -= this->mesh2D.faceNodeStartIdx;
     }
     vtkDebugMacro("Corrected face-node connectivity for start index=" <<
                    this->mesh2D.faceNodeStartIdx << endl);
@@ -486,10 +486,10 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   {
     vtkDebugMacro("Resolving grid periodicity..." << endl);
 
-    resolvePeriodicGrid(node_coords_x, node_coords_y, face_nodes,
+    resolvePeriodicGrid(nodeCoordsX, nodeCoordsY, faceNodes,
                         this->mesh2D.numFaces, this->mesh2D.numVertsPerFace);
     // Update node count to allow for added nodes
-    numNodesCurrent = node_coords_x.size();
+    numNodesCurrent = nodeCoordsX.size();
   }
 
   this->UpdateProgress(0.5);
@@ -506,7 +506,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   // Use vtkArrayDispatch mechanism to fill vtkDataArray directly, this is
   // a lot faster than using Insert or Set methods
-  SetPointLocationWorker pointsWorker(node_coords_x, node_coords_y, levels,
+  SetPointLocationWorker pointsWorker(nodeCoordsX, nodeCoordsY, levels,
                                       this->UseCartCoords);
   typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Reals> pointsDispatcher;
   if (!pointsDispatcher::Execute(pointLocs, pointsWorker))
@@ -531,7 +531,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   cellConnect->SetNumberOfTuples(numLevels*this->mesh2D.numFaces*
                                  (2*this->mesh2D.numVertsPerFace+1));
 
-  SetConnectivityWorker connectWorker(face_nodes, numLevels, this->mesh2D.numFaces,
+  SetConnectivityWorker connectWorker(faceNodes, numLevels, this->mesh2D.numFaces,
                                       this->mesh2D.numVertsPerFace, numNodesCurrent);
   typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Integrals> cellsDispatcher;
   if (!cellsDispatcher::Execute(cellConnect, connectWorker))
@@ -586,11 +586,11 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   this->SetProgressText("Creating VTK Points");
   this->UpdateProgress(0.0);
 
-  std::vector<double> edge_coords_x = inputFile.GetVarDouble(this->mesh2D.edgeCoordXVar,
-                                                             {0}, {this->mesh2D.numEdges});
+  std::vector<double> edgeCoordsX = inputFile.GetVarDouble(this->mesh2D.edgeCoordXVar,
+                                                           {0}, {this->mesh2D.numEdges});
 
-  std::vector<double> edge_coords_y = inputFile.GetVarDouble(this->mesh2D.edgeCoordYVar,
-                                                             {0}, {this->mesh2D.numEdges});
+  std::vector<double> edgeCoordsY = inputFile.GetVarDouble(this->mesh2D.edgeCoordYVar,
+                                                           {0}, {this->mesh2D.numEdges});
 
   //
   // Determine vertical vertex heights
@@ -602,7 +602,8 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
     levels.resize(numLevels);
     for (size_t idx = 0; idx < numLevels; idx++)
     {
-      levels[idx] = static_cast<double>(startLevel + idx);
+      // Shift levels by 0.5 to position points in face centres
+      levels[idx] = static_cast<double>(startLevel + idx) + 0.5;
       levels[idx] = this->VerticalScale*(levels[idx] + this->VerticalBias);
     }
   }
@@ -638,7 +639,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   points->SetNumberOfPoints(this->mesh2D.numEdges*numLevels);
   vtkDataArray * pointLocs = points->GetData();
 
-  SetPointLocationWorker pointsWorker(edge_coords_x, edge_coords_y, levels,
+  SetPointLocationWorker pointsWorker(edgeCoordsX, edgeCoordsY, levels,
                                       this->UseCartCoords);
   typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Reals> pointsDispatcher;
   if (!pointsDispatcher::Execute(pointLocs, pointsWorker))

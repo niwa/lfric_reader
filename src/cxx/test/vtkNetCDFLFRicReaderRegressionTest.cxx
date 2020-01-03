@@ -178,9 +178,8 @@ TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
     reader->Update();
     double gridBounds[6];
     grid->GetBounds(gridBounds);
-    // This test currently fails as edges are not mirrored,
-    // which leads to a slight asymmetry
-    // REQUIRE( gridBounds[1] == Approx(-gridBounds[0]) );
+    // This test currently fails
+    //REQUIRE( gridBounds[1] == Approx(-gridBounds[0]) );
     REQUIRE( gridBounds[3] == Approx(-gridBounds[2]) );
     REQUIRE( gridBounds[5] == Approx(-gridBounds[4]) );
   }
@@ -199,8 +198,8 @@ TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
     reader->SetUseIndexAsVertCoord(1);
     reader->Update();
     grid->GetBounds(gridBounds);
-    REQUIRE( gridBounds[4] == Approx(1.0) );
-    REQUIRE( gridBounds[5] == Approx(3.0) );
+    REQUIRE( gridBounds[4] == Approx(1.5) );
+    REQUIRE( gridBounds[5] == Approx(3.5) );
   }
 
   SECTION ("Setting Vertical Bias Works")
@@ -211,8 +210,8 @@ TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
     reader->Update();
     double gridBounds[6];
     grid->GetBounds(gridBounds);
-    REQUIRE( gridBounds[4] == Approx(verticalBias) );
-    REQUIRE( gridBounds[5] == Approx(verticalBias+2.0) );
+    REQUIRE( gridBounds[4] == Approx(verticalBias+0.5) );
+    REQUIRE( gridBounds[5] == Approx(verticalBias+2.5) );
   }
 
   SECTION ("Setting Vertical Scale Works")
@@ -223,8 +222,8 @@ TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
     reader->Update();
     double gridBounds[6];
     grid->GetBounds(gridBounds);
-    REQUIRE( gridBounds[4] == Approx(verticalScale) );
-    REQUIRE( gridBounds[5] == Approx(3.0*verticalScale) );
+    REQUIRE( gridBounds[4] == Approx(verticalScale*1.5) );
+    REQUIRE( gridBounds[5] == Approx(verticalScale*3.5) );
   }
 
   reader->Delete();
