@@ -172,7 +172,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
   }
   else
   {
-    inputFile.UpdateFieldMap(this->PointFields, "face", this->mesh2D.faceDim, halfLevelFaceMesh,
+    inputFile.UpdateFieldMap(this->CellFields, "face", this->mesh2D.faceDim, halfLevelFaceMesh,
                              zAxis.axisDim, tAxis.axisDim);
   }
   vtkDebugMacro("Number of cell fields found: " << this->CellFields.size() << endl);
@@ -346,7 +346,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
     }
   }
   // VTK points only for W2 visualisation
-  else if (this->OutputMode == 1)
+  else if (this->OutputMode == 1 and this->mesh2D.edgeDim != "None")
   {
     if (!this->CreateVTKPoints(inputFile, outputGrid,
                                static_cast<size_t>(startLevel),
