@@ -153,27 +153,42 @@ int vtkNetCDFLFRicReader::RequestInformation(
   // Look for vertical axis - may be absent
   this->zAxis = inputFile.GetZAxisDescription(this->mesh2D.isLFRicXIOSFile,
                                               this->mesh2D.meshType);
-  vtkDebugMacro("Vertical axis:" << zAxis.axisVar << endl);
+  vtkDebugMacro("Vertical axis:" << inputFile.GetVarName(zAxis.axisVarId) << endl);
 
   // Look for time axis - may be absent
   this->tAxis = inputFile.GetTAxisDescription();
-  vtkDebugMacro("Time axis:" << tAxis.axisVar << endl);
+  vtkDebugMacro("Time axis:" << inputFile.GetVarName(tAxis.axisVarId) << endl);
 
   // If this is an LFRic output file, add fields that are defined on all supported meshes,
   // otherwise accept only fields on the single mesh that is expected to be of half-level type
   if (this->mesh2D.isLFRicXIOSFile)
   {
-    inputFile.UpdateFieldMap(this->CellFields, "face", "nMesh2d_half_levels_face", halfLevelFaceMesh,
-                             "half_levels", tAxis.axisDim);
-    inputFile.UpdateFieldMap(this->CellFields, "face", "nMesh2d_full_levels_face", fullLevelFaceMesh,
-                             "full_levels", tAxis.axisDim);
-    inputFile.UpdateFieldMap(this->PointFields, "edge", "nMesh2d_edge_half_levels_edge", halfLevelEdgeMesh,
-                             "half_levels", tAxis.axisDim);
+    if (inputFile.HasDim("nMesh2d_half_levels_face"))
+    {
+      const int horizontalDimId = inputFile.GetDimId("nMesh2d_half_levels_face");
+      const int verticalDimId = inputFile.GetDimId("half_levels");
+      inputFile.UpdateFieldMap(this->CellFields, "face", horizontalDimId,
+                               halfLevelFaceMesh, verticalDimId, tAxis.axisDimId);
+    }
+    if (inputFile.HasDim("nMesh2d_full_levels_face"))
+    {
+      const int horizontalDimId = inputFile.GetDimId("nMesh2d_full_levels_face");
+      const int verticalDimId = inputFile.GetDimId("full_levels");
+      inputFile.UpdateFieldMap(this->CellFields, "face", horizontalDimId,
+                               fullLevelFaceMesh, verticalDimId, tAxis.axisDimId);
+    }
+    if (inputFile.HasDim("nMesh2d_edge_half_levels_edge"))
+    {
+      const int horizontalDimId = inputFile.GetDimId("nMesh2d_edge_half_levels_edge");
+      const int verticalDimId = inputFile.GetDimId("half_levels");
+      inputFile.UpdateFieldMap(this->PointFields, "edge", horizontalDimId,
+                               halfLevelEdgeMesh, verticalDimId, tAxis.axisDimId);
+    }
   }
   else
   {
-    inputFile.UpdateFieldMap(this->CellFields, "face", this->mesh2D.faceDim, halfLevelFaceMesh,
-                             zAxis.axisDim, tAxis.axisDim);
+    inputFile.UpdateFieldMap(this->CellFields, "face", this->mesh2D.faceDimId, halfLevelFaceMesh,
+                             zAxis.axisDimId, tAxis.axisDimId);
   }
   vtkDebugMacro("Number of cell fields found: " << this->CellFields.size() << endl);
   vtkDebugMacro("Number of point fields found: " << this->PointFields.size() << endl);
@@ -184,7 +199,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
   // Read time variable if applicable, and tell the pipeline
   if (this->tAxis.numTimeSteps > 0)
   {
-    this->TimeSteps = inputFile.GetVarDouble(this->tAxis.axisVar, {0},
+    this->TimeSteps = inputFile.GetVarDouble(this->tAxis.axisVarId, {0},
                                              {this->tAxis.numTimeSteps});
 
     // Tell the pipeline which steps are available and their range
@@ -346,7 +361,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
     }
   }
   // VTK points only for W2 visualisation
-  else if (this->OutputMode == 1 and this->mesh2D.edgeDim != "None")
+  else if (this->OutputMode == 1 and this->mesh2D.edgeDimId >= 0)
   {
     if (!this->CreateVTKPoints(inputFile, outputGrid,
                                static_cast<size_t>(startLevel),
@@ -398,14 +413,14 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   // Load node coordinates and face-node connectivities
   //
 
-  std::vector<double> nodeCoordsX = inputFile.GetVarDouble(this->mesh2D.nodeCoordXVar,
+  std::vector<double> nodeCoordsX = inputFile.GetVarDouble(this->mesh2D.nodeCoordXVarId,
                                                              {0}, {this->mesh2D.numNodes});
 
-  std::vector<double> nodeCoordsY = inputFile.GetVarDouble(this->mesh2D.nodeCoordYVar,
+  std::vector<double> nodeCoordsY = inputFile.GetVarDouble(this->mesh2D.nodeCoordYVarId,
                                                              {0}, {this->mesh2D.numNodes});
 
   std::vector<long long> faceNodes = inputFile.GetVarLongLong(
-                         this->mesh2D.faceNodeConnVar,
+                         this->mesh2D.faceNodeConnVarId,
                          {0,0}, {this->mesh2D.numFaces, this->mesh2D.numVertsPerFace});
 
   // Correct node IDs if non-zero start index
@@ -437,12 +452,12 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   else if (this->mesh2D.meshType == fullLevelFaceMesh)
   {
     // Load vertex heights from file
-    levels = inputFile.GetVarDouble(this->zAxis.axisVar,
+    levels = inputFile.GetVarDouble(this->zAxis.axisVarId,
                                     {startLevel}, {numLevels+1});
   }
   else if (this->mesh2D.meshType == halfLevelFaceMesh)
   {
-    std::vector<double> halfLevels = inputFile.GetVarDouble(this->zAxis.axisVar,
+    std::vector<double> halfLevels = inputFile.GetVarDouble(this->zAxis.axisVarId,
                                      {0}, {this->zAxis.numLevels});
 
     // Extrapolate half-level heights at both ends
@@ -586,10 +601,10 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   this->SetProgressText("Creating VTK Points");
   this->UpdateProgress(0.0);
 
-  std::vector<double> edgeCoordsX = inputFile.GetVarDouble(this->mesh2D.edgeCoordXVar,
+  std::vector<double> edgeCoordsX = inputFile.GetVarDouble(this->mesh2D.edgeCoordXVarId,
                                                            {0}, {this->mesh2D.numEdges});
 
-  std::vector<double> edgeCoordsY = inputFile.GetVarDouble(this->mesh2D.edgeCoordYVar,
+  std::vector<double> edgeCoordsY = inputFile.GetVarDouble(this->mesh2D.edgeCoordYVarId,
                                                            {0}, {this->mesh2D.numEdges});
 
   //
@@ -609,7 +624,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   }
   else if (this->mesh2D.meshType == fullLevelFaceMesh)
   {
-    levels = inputFile.GetVarDouble(this->zAxis.axisVar,
+    levels = inputFile.GetVarDouble(this->zAxis.axisVarId,
                                     {startLevel}, {numLevels+1});
 
     // Compute half-level heights for points visualisation,
@@ -720,6 +735,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
     if (field.second.active)
     {
       const std::string & fieldName = field.first;
+      const int fieldNameVarId = inputFile.GetVarId(fieldName);
       const DataField & fieldSpec = field.second;
 
       vtkDebugMacro("Reading variable " << fieldName << endl);
@@ -792,7 +808,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
       // contains the surface level
       if (fieldSpec.hasVerticalDim or (startLevel == 0))
       {
-        read_buffer = inputFile.GetVarDouble(fieldName, start, count);
+        read_buffer = inputFile.GetVarDouble(fieldNameVarId, start, count);
       }
 
       // Fill remaining space with NaNs if vertical dimension not present (2D fields)

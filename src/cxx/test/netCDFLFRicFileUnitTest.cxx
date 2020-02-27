@@ -45,39 +45,70 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
 
   SECTION( "GetDimLen Works" )
   {
-    REQUIRE( ncFile.GetDimLen("Two") == 2 );
+    const int dimId = ncFile.GetDimId("Two");
+    REQUIRE( ncFile.GetDimLen(dimId) == 2 );
+  }
+
+  SECTION( "GetDimId Works" )
+  {
+    REQUIRE( ncFile.GetDimId("Two") == 6 );
+  }
+
+  SECTION( "GetDimName Works" )
+  {
+    const int dimId = ncFile.GetDimId("Two");
+    REQUIRE( ncFile.GetDimName(dimId) == "Two" );
+  }
+
+  SECTION( "GetVarId Works" )
+  {
+    REQUIRE( ncFile.GetVarId("var1") == 19 );
+  }
+
+  SECTION( "GetVarName Works" )
+  {
+    const int varId = ncFile.GetVarId("var1");
+    REQUIRE( ncFile.GetVarName(varId) == "var1" );
   }
 
   SECTION( "GetVarNumDims Works" )
   {
-    REQUIRE( ncFile.GetVarNumDims("var1") == 2 );
+    const int varId = ncFile.GetVarId("var1");
+    REQUIRE( ncFile.GetVarNumDims(varId) == 2 );
   }
 
-  SECTION( "GetVarDimName With Out Of Range Dim Index" )
+  SECTION( "GetVarDimId With Valid Dim Works" )
   {
-    REQUIRE( ncFile.GetVarDimName("var1", -1) == "" );
-    REQUIRE( ncFile.GetVarDimName("var1", 100) == "" );
+    const int varId = ncFile.GetVarId("var1");
+    const int dimId = ncFile.GetDimId("nMesh2d_half_levels_face");
+    REQUIRE( ncFile.GetVarDimId(varId, 1) == dimId );
   }
 
-  SECTION( "GetVarDimName With Valid Index" )
+  SECTION( "GetVarDimId With Invalid Dim Works" )
   {
-    REQUIRE( ncFile.GetVarDimName("var1", 0) == "half_levels" );
+    const int varId = ncFile.GetVarId("var1");
+    REQUIRE( ncFile.GetVarDimId(varId, -7) == -1 );
+    REQUIRE( ncFile.GetVarDimId(varId, 10) == -1 );
   }
 
   SECTION( "GetAttInt Returns Correct Attribute" )
   {
-    REQUIRE( ncFile.GetAttInt("var1", "index") == 7 );
+    const int varId = ncFile.GetVarId("var1");
+    REQUIRE( ncFile.GetAttInt(varId, "index") == 7 );
   }
 
   SECTION( "GetAttText Returns Correct Attribute" )
   {
+    const int varId = ncFile.GetVarId("var1");
+    REQUIRE( ncFile.GetAttText(varId, "long_name") == "var1" );
     REQUIRE( ncFile.GetAttText("var1", "long_name") == "var1" );
   }
 
   SECTION( "GetAttTextSplit Returns Correct Attributes" )
   {
+    const int varId = ncFile.GetVarId("Mesh2d_full_levels");
     std::vector<std::string> result =
-      ncFile.GetAttTextSplit("Mesh2d_full_levels", "node_coordinates");
+      ncFile.GetAttTextSplit(varId, "node_coordinates");
 
     REQUIRE( result.size() == 2 );
     REQUIRE( result[0] == "Mesh2d_full_levels_node_x" );
@@ -94,40 +125,21 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
     REQUIRE( ncFile.HasVar("notavalidvar") == false );
   }
 
-  SECTION( "VarHasDim Returns False If Dimension Nonexistent" )
-  {
-    REQUIRE( ncFile.VarHasDim("var1", "nonexistentdim") == false );
-  }
-
-  SECTION( "VarHasDim Returns False If Existing Dimension Not Used" )
-  {
-    REQUIRE( ncFile.HasDim("Four") == true );
-    REQUIRE( ncFile.VarHasDim("var1", "Four") == false );
-  }
-
-  SECTION( "VarHasDim Returns True If Dimension Exists And Is Used" )
-  {
-    REQUIRE( ncFile.HasDim("half_levels") == true );
-    REQUIRE( ncFile.VarHasDim("var1", "half_levels") == true );
-  }
-
   SECTION( "VarHasAtt Returns False If Attribute Nonexistent" )
   {
-    REQUIRE( ncFile.VarHasAtt("var1", "nonexistentatt") == false );
+    const int varId = ncFile.GetVarId("var1");
+    REQUIRE( ncFile.VarHasAtt(varId, "nonexistentatt") == false );
   }
 
   SECTION( "VarHasAtt Returns True If Attribute Exists" )
   {
-    REQUIRE( ncFile.VarHasAtt("var1", "long_name") == true );
+    const int varId = ncFile.GetVarId("var1");
+    REQUIRE( ncFile.VarHasAtt(varId, "long_name") == true );
   }
 
-  SECTION( "GetVarNames Returns Correct Names" )
+  SECTION( "GetNumVars Returns Correct Result" )
   {
-    std::vector<std::string> result = ncFile.GetVarNames();
-    // Just check that there is more than 1 var name as
-    // the number may change, and look at the first name
-    REQUIRE( result.size() > 1 );
-    REQUIRE( result[0] == "Mesh2d_full_levels" );
+    REQUIRE( ncFile.GetNumVars() == 23 );
   }
 
 }
@@ -140,32 +152,33 @@ TEST_CASE( "NetCDF Data Tests", "[data]" )
 
   SECTION( "GetVarDouble Returns Correct Result" )
   {
-    std::vector<double> result = ncFile.GetVarDouble("var2", {0,0}, {1,1});
+    const int varId = ncFile.GetVarId("var2");
+    std::vector<double> result = ncFile.GetVarDouble(varId, {0,0}, {1,1});
     REQUIRE( result[0] == Approx(0.0) );
   }
 
   SECTION( "GetVarDouble Returns NaN With Incorrect Number Of Dimensions" )
   {
-    std::vector<double> result = ncFile.GetVarDouble("var1", {0}, {1});
+    const int varId = ncFile.GetVarId("var1");
+    std::vector<double> result = ncFile.GetVarDouble(varId, {0}, {1});
     REQUIRE( std::isnan(result[0]) == true );
-    result = ncFile.GetVarDouble("var1", {0,0,0}, {1,1,1});
+    result = ncFile.GetVarDouble(varId, {0,0,0}, {1,1,1});
     REQUIRE( std::isnan(result[0]) == true );
   }
 
   SECTION( "GetVarLongLong Returns Correct Result" )
   {
-    std::vector<long long> result =
-      ncFile.GetVarLongLong("Mesh2d_full_levels_edge_nodes", {0,0}, {1,1});
+    const int varId = ncFile.GetVarId("Mesh2d_full_levels_edge_nodes");
+    std::vector<long long> result = ncFile.GetVarLongLong(varId, {0,0}, {1,1});
     REQUIRE( result[0] == 1 );
   }
 
   SECTION( "GetVarLongLong Returns Zero With Incorrect Number Of Dimensions" )
   {
-    std::vector<long long> result =
-      ncFile.GetVarLongLong("Mesh2d_full_levels_edge_nodes", {0}, {1});
+    const int varId = ncFile.GetVarId("Mesh2d_full_levels_edge_nodes");
+    std::vector<long long> result = ncFile.GetVarLongLong(varId, {0}, {1});
     REQUIRE( result[0] == 0 );
-    result =
-      ncFile.GetVarLongLong("Mesh2d_full_levels_edge_nodes", {0,0,0}, {1,1,1});
+    result = ncFile.GetVarLongLong(varId, {0,0,0}, {1,1,1});
     REQUIRE( result[0] == 0 );
   }
 
@@ -187,14 +200,20 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
     REQUIRE( result.numEdges == 108 );
     REQUIRE( result.numFaces == 54 );
     REQUIRE( result.numVertsPerFace == 4 );
-    REQUIRE( result.meshTopologyVar == "Mesh2d_full_levels" );
-    REQUIRE( result.nodeCoordXVar == "Mesh2d_full_levels_node_x" );
-    REQUIRE( result.nodeCoordYVar == "Mesh2d_full_levels_node_y" );
-    REQUIRE( result.faceNodeConnVar == "Mesh2d_full_levels_face_nodes" );
+    const std::string meshTopologyVar = ncFile.GetVarName(result.meshTopologyVarId);
+    REQUIRE( meshTopologyVar == "Mesh2d_full_levels" );
+    const std::string nodeCoordXVar = ncFile.GetVarName(result.nodeCoordXVarId);
+    REQUIRE( nodeCoordXVar == "Mesh2d_full_levels_node_x" );
+    const std::string nodeCoordYVar = ncFile.GetVarName(result.nodeCoordYVarId);
+    REQUIRE( nodeCoordYVar == "Mesh2d_full_levels_node_y" );
+    const std::string faceNodeConnVar = ncFile.GetVarName(result.faceNodeConnVarId);
+    REQUIRE( faceNodeConnVar == "Mesh2d_full_levels_face_nodes" );
     // Edge-half-level-mesh is currently used here to due inconsistency with
     // full-level mesh
-    REQUIRE( result.edgeCoordXVar == "Mesh2d_edge_half_levels_edge_x" );
-    REQUIRE( result.edgeCoordYVar == "Mesh2d_edge_half_levels_edge_y" );
+    const std::string edgeCoordXVar = ncFile.GetVarName(result.edgeCoordXVarId);
+    REQUIRE( edgeCoordXVar == "Mesh2d_edge_half_levels_edge_x" );
+    const std::string edgeCoordYVar = ncFile.GetVarName(result.edgeCoordYVarId);
+    REQUIRE( edgeCoordYVar == "Mesh2d_edge_half_levels_edge_y" );
     REQUIRE( result.faceNodeStartIdx == 1 );
   }
 
@@ -202,44 +221,48 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
   {
     CFVerticalAxis result = ncFile.GetZAxisDescription(true, fullLevelFaceMesh);
     REQUIRE( result.numLevels == 3 );
-    REQUIRE( result.axisDim == "full_levels" );
-    REQUIRE( result.axisVar == "full_levels" );
+    const std::string axisDim = ncFile.GetDimName(result.axisDimId);
+    REQUIRE( axisDim == "full_levels" );
+    const std::string axisVar = ncFile.GetVarName(result.axisVarId);
+    REQUIRE( axisVar == "full_levels" );
   }
 
   SECTION( "GetZAxisDescription Returns Correct Result For Half-Level LFRic File" )
   {
     CFVerticalAxis result = ncFile.GetZAxisDescription(true, halfLevelFaceMesh);
     REQUIRE( result.numLevels == 3 );
-    REQUIRE( result.axisDim == "half_levels" );
-    REQUIRE( result.axisVar == "half_levels" );
+    const std::string axisDim = ncFile.GetDimName(result.axisDimId);
+    REQUIRE( axisDim == "half_levels" );
+    const std::string axisVar = ncFile.GetVarName(result.axisVarId);
+    REQUIRE( axisVar == "half_levels" );
   }
 
   SECTION( "GetZAxisDescription Returns No Axis For Non-LFRic File" )
   {
     CFVerticalAxis result = ncFile.GetZAxisDescription(false, halfLevelFaceMesh);
     REQUIRE( result.numLevels == 1 );
-    REQUIRE( result.axisDim == "None" );
-    REQUIRE( result.axisVar == "None" );
+    REQUIRE( result.axisDimId == -1 );
+    REQUIRE( result.axisVarId == -1 );
   }
 
   SECTION( "GetZAxisDescription Returns No Axis For Unknown Mesh" )
   {
     CFVerticalAxis result = ncFile.GetZAxisDescription(false, unknownMesh);
     REQUIRE( result.numLevels == 1 );
-    REQUIRE( result.axisDim == "None" );
-    REQUIRE( result.axisVar == "None" );
+    REQUIRE( result.axisDimId == -1 );
+    REQUIRE( result.axisVarId == -1 );
     result = ncFile.GetZAxisDescription(true, unknownMesh);
     REQUIRE( result.numLevels == 1 );
-    REQUIRE( result.axisDim == "None" );
-    REQUIRE( result.axisVar == "None" );
+    REQUIRE( result.axisDimId == -1 );
+    REQUIRE( result.axisVarId == -1 );
   }
 
   SECTION( "GetTAxisDescription Returns No Axis" )
   {
     CFTimeAxis result = ncFile.GetTAxisDescription();
     REQUIRE( result.numTimeSteps == 0 );
-    REQUIRE( result.axisDim == "None" );
-    REQUIRE( result.axisVar == "None" );
+    REQUIRE( result.axisDimId == -1 );
+    REQUIRE( result.axisVarId == -1 );
   }
 
 }
@@ -253,8 +276,8 @@ TEST_CASE( "Field Tests", "[metadata]" )
   SECTION( "UpdateFieldMap Returns Correct Result For Full-Levels Face Fields" )
   {
     std::map<std::string, DataField> fields;
-    ncFile.UpdateFieldMap(fields, "face", "nMesh2d_full_levels_face",
-                          fullLevelFaceMesh, "full_levels", "None");
+    ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_full_levels_face"),
+                          fullLevelFaceMesh, ncFile.GetDimId("full_levels"), -1);
     REQUIRE( fields.size() == 1 );
 
     // var3 has horizontal and vertical dimensions
@@ -278,8 +301,8 @@ TEST_CASE( "Field Tests", "[metadata]" )
   SECTION( "UpdateFieldMap Returns Correct Result For Half-Levels Face Fields" )
   {
     std::map<std::string, DataField> fields;
-    ncFile.UpdateFieldMap(fields, "face", "nMesh2d_half_levels_face",
-                          halfLevelFaceMesh, "half_levels", "None");
+    ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_half_levels_face"),
+                          halfLevelFaceMesh, ncFile.GetDimId("half_levels"), -1);
     REQUIRE( fields.size() == 2 );
 
     // var1 has horizontal and vertical dimensions
@@ -320,16 +343,15 @@ TEST_CASE( "Field Tests", "[metadata]" )
   SECTION( "UpdateFieldMap Returns No Result For Undefined Location" )
   {
     std::map<std::string, DataField> fields;
-    ncFile.UpdateFieldMap(fields, "nowhere", "nMesh2d_half_levels_face",
-                          halfLevelFaceMesh, "half_levels", "None");
+    ncFile.UpdateFieldMap(fields, "nowhere", ncFile.GetDimId("nMesh2d_half_levels_face"),
+                          halfLevelFaceMesh, ncFile.GetDimId("half_levels"), -1);
     REQUIRE( fields.size() == 0 );
   }
 
   SECTION( "UpdateFieldMap Returns No Result For Two Unidentified Dimensions" )
   {
     std::map<std::string, DataField> fields;
-    ncFile.UpdateFieldMap(fields, "nowhere", "nohorizontaldim",
-                          halfLevelFaceMesh, "noverticaldim", "None");
+    ncFile.UpdateFieldMap(fields, "nowhere", -1, halfLevelFaceMesh, -1, -1);
     REQUIRE( fields.size() == 0 );
   }
 

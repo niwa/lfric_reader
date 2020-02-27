@@ -78,22 +78,59 @@ bool netCDFLFRicFile::HasDim(const std::string& dimName)
 
 //----------------------------------------------------------------------------
 
-size_t netCDFLFRicFile::GetDimLen(const std::string& dimName)
+size_t netCDFLFRicFile::GetDimLen(const int dimId)
 {
-  int dimId;
   size_t dimLen;
-  ncErrorMacro(nc_inq_dimid(this->ncId, dimName.c_str(), &dimId));
   ncErrorMacro(nc_inq_dimlen(this->ncId, dimId, &dimLen));
   return dimLen;
 }
 
 //----------------------------------------------------------------------------
 
-size_t netCDFLFRicFile::GetVarNumDims(const std::string& varName)
+int netCDFLFRicFile::GetDimId(const std::string& dimName)
+{
+  int dimId;
+  ncErrorMacro(nc_inq_dimid(this->ncId, dimName.c_str(), &dimId));
+  return dimId;
+}
+
+//----------------------------------------------------------------------------
+
+std::string netCDFLFRicFile::GetDimName(const int dimId)
+{
+  // NetCDF dimensions can use up to NC_MAX_NAME bytes
+  char *dimName = new char[NC_MAX_NAME+1];
+  ncErrorMacro(nc_inq_dimname(this->ncId, dimId, dimName));
+  const std::string dimNameStr(dimName);
+  delete[] dimName;
+  return dimNameStr;
+}
+
+//----------------------------------------------------------------------------
+
+int netCDFLFRicFile::GetVarId(const std::string& varName)
 {
   int varId;
   ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
+  return varId;
+}
 
+//----------------------------------------------------------------------------
+
+std::string netCDFLFRicFile::GetVarName(const int varId)
+{
+  // NetCDF variables can use up to NC_MAX_NAME bytes
+  char *varName = new char[NC_MAX_NAME+1];
+  ncErrorMacro(nc_inq_varname(this->ncId, varId, varName));
+  const std::string varNameStr(varName);
+  delete[] varName;
+  return varNameStr;
+}
+
+//----------------------------------------------------------------------------
+
+size_t netCDFLFRicFile::GetVarNumDims(const int varId)
+{
   int numDims;
   ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
 
@@ -103,57 +140,37 @@ size_t netCDFLFRicFile::GetVarNumDims(const std::string& varName)
 
 //----------------------------------------------------------------------------
 
-std::string netCDFLFRicFile::GetVarDimName(const std::string& varName,
-                                           const size_t dim)
+int netCDFLFRicFile::GetVarDimId(const int varId,
+                                 const size_t dim)
 {
-  int varId;
-  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
+  const size_t numDims = this->GetVarNumDims(varId);
 
-  int numDims;
-  ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
-
-  std::string dimNameStr;
-  dimNameStr.clear();
-
-  // Return empty string if out of range
+  // Return undefined ID if out of range
+  int dimId = -1;
   if (dim >= 0 and dim < numDims)
   {
     std::vector<int> dimIds;
     dimIds.resize(numDims);
     ncErrorMacro(nc_inq_vardimid(this->ncId, varId, dimIds.data()));
-
-    char *dimName = new char[NC_MAX_NAME+1];
-    ncErrorMacro(nc_inq_dimname(this->ncId, dimIds[dim], dimName));
-
-    // NetCDF docs say that dimension names are guaranteed to be null-terminated
-    dimNameStr = dimName;
-
-    delete[] dimName;
+    dimId = dimIds[dim];
   }
 
-  return dimNameStr;
+  return dimId;
 }
 
 //----------------------------------------------------------------------------
 
-int netCDFLFRicFile::GetAttInt(const std::string& varName, const std::string& attName)
+int netCDFLFRicFile::GetAttInt(const int varId, const std::string& attName)
 {
-  int varId;
-  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
-
   int attInt;
   ncErrorMacro(nc_get_att_int(this->ncId, varId, attName.c_str(), &attInt));
-
   return attInt;
 }
 
 //----------------------------------------------------------------------------
 
-std::string netCDFLFRicFile::GetAttText(const std::string& varName, const std::string& attName)
+std::string netCDFLFRicFile::GetAttText(const int varId, const std::string& attName)
 {
-  int varId;
-  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
-
   size_t attTextLen;
   ncErrorMacro(nc_inq_attlen(this->ncId, varId, attName.c_str(), &attTextLen));
 
@@ -169,10 +186,18 @@ std::string netCDFLFRicFile::GetAttText(const std::string& varName, const std::s
 
 //----------------------------------------------------------------------------
 
-std::vector<std::string> netCDFLFRicFile::GetAttTextSplit(const std::string& varName,
+std::string netCDFLFRicFile::GetAttText(const std::string& varName, const std::string& attName)
+{
+  const int varId = this->GetVarId(varName);
+  return this->GetAttText(varId, attName);
+}
+
+//----------------------------------------------------------------------------
+
+std::vector<std::string> netCDFLFRicFile::GetAttTextSplit(const int varId,
                                                           const std::string& attName)
 {
-  std::string attText = this->GetAttText(varName, attName);
+  const std::string attText = this->GetAttText(varId, attName);
   std::istringstream attStream(attText);
   std::vector<std::string> textSplit(std::istream_iterator<std::string>{attStream},
                                      std::istream_iterator<std::string>());
@@ -201,43 +226,8 @@ bool netCDFLFRicFile::HasVar(const std::string& varName)
 
 //----------------------------------------------------------------------------
 
-bool netCDFLFRicFile::VarHasDim(const std::string& varName, const std::string& dimName)
+bool netCDFLFRicFile::VarHasAtt(const int varId, const std::string& attName)
 {
-  // If dimName does not exist, the variable won't have it...
-  if (not this->HasDim(dimName))
-  {
-    return false;
-  }
-
-  int varId;
-  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
-
-  int numDims;
-  ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
-
-  std::vector<int> dimIds;
-  dimIds.resize(numDims);
-  ncErrorMacro(nc_inq_vardimid(this->ncId, varId, dimIds.data()));
-
-  int dimIdOfInterest;
-  ncErrorMacro(nc_inq_dimid(this->ncId, dimName.c_str(), &dimIdOfInterest));
-
-  bool dimFound = false;
-  for (int const dimId : dimIds)
-  {
-    if (dimId == dimIdOfInterest) dimFound = true;
-  }
-
-  return dimFound;
-}
-
-//----------------------------------------------------------------------------
-
-bool netCDFLFRicFile::VarHasAtt(const std::string& varName, const std::string& attName)
-{
-  int varId;
-  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
-
   int attId;
   const int result = nc_inq_attid(this->ncId, varId, attName.c_str(), &attId);
   if (result == NC_NOERR)
@@ -256,36 +246,20 @@ bool netCDFLFRicFile::VarHasAtt(const std::string& varName, const std::string& a
 
 //----------------------------------------------------------------------------
 
-std::vector<std::string> netCDFLFRicFile::GetVarNames()
+size_t netCDFLFRicFile::GetNumVars()
 {
-  std::vector<std::string> varNames;
   int numVars;
   ncErrorMacro(nc_inq_nvars(this->ncId, &numVars));
-  varNames.resize(numVars);
-
-  // NetCDF variables can use up to NC_MAX_NAME bytes
-  char *varName = new char[NC_MAX_NAME+1];
-  for (int iVar = 0; iVar < numVars; iVar++)
-  {
-    ncErrorMacro(nc_inq_varname(this->ncId, iVar, varName));
-    // NetCDF docs say that variable names are guaranteed to be null-terminated
-    varNames[iVar] = varName;
-  }
-  delete[] varName;
-  return varNames;
+  return numVars;
 }
 
 //----------------------------------------------------------------------------
 
 std::vector<double> netCDFLFRicFile::GetVarDouble(
-                    const std::string& varName,
+                    const int varId,
                     const std::vector<size_t>& start,
                     const std::vector<size_t>& count)
 {
-  // Find variable by name
-  int varId;
-  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
-
   // Compute total number of elements to read
   size_t size = 1;
   for (size_t const n : count)
@@ -297,8 +271,7 @@ std::vector<double> netCDFLFRicFile::GetVarDouble(
   varData.resize(size);
 
   // Check if number of dimensions matches netCDF variable
-  int numDims;
-  ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
+  const int numDims = this->GetVarNumDims(varId);
   if (numDims != start.size() or numDims != count.size())
   {
     std::cerr << "netCDFLFRicFile::GetVarDouble: number of dimensions does not match netCDF variable.\n";
@@ -318,13 +291,10 @@ std::vector<double> netCDFLFRicFile::GetVarDouble(
 //----------------------------------------------------------------------------
 
 std::vector<long long> netCDFLFRicFile::GetVarLongLong(
-                       const std::string& varName,
+                       const int varId,
                        const std::vector<size_t>& start,
                        const std::vector<size_t>& count)
 {
-  int varId;
-  ncErrorMacro(nc_inq_varid(this->ncId, varName.c_str(), &varId));
-
   size_t size = 1;
   for (size_t const n : count)
   {
@@ -335,8 +305,7 @@ std::vector<long long> netCDFLFRicFile::GetVarLongLong(
   varData.resize(size);
 
   // Check if number of dimensions matches netCDF variable
-  int numDims;
-  ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
+  const int numDims = this->GetVarNumDims(varId);
   if (numDims != start.size() or numDims != count.size())
   {
     std::cerr << "netCDFLFRicFile::GetVarLongLong: number of dimensions does not match netCDF variable.\n";
@@ -361,26 +330,27 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   // Edge descriptions currently need to be read from edge mesh (if available)
   // due to an inconsistency in edge ordering of face and edge meshes.
   bool hasHalfLevelEdgeMesh = false;
-  std::string meshTopologyVarEdge;
+  int meshTopologyVarEdgeId = -1;
 
   // Look for UGRID 2D mesh description dummy variable,
   // must have attribute cf_role=mesh_topology
   // There can be several mesh descriptions in a file
-  mesh2D.meshTopologyVar.clear();
-  for (std::string const &varName : this->GetVarNames())
+  for (int varId = 0; varId < this->GetNumVars(); varId++)
   {
-    if (this->VarHasAtt(varName, "cf_role"))
+    const std::string varName = this->GetVarName(varId);
+
+    if (this->VarHasAtt(varId, "cf_role"))
     {
-      if (this->GetAttText(varName, "cf_role") == "mesh_topology")
+      if (this->GetAttText(varId, "cf_role") == "mesh_topology")
       {
         mesh2D.numTopologies++;
 
         // Prefer LFRic full-level face mesh which matches VTK grids
         // topology_dimension=2 means faces
         if (varName == "Mesh2d_full_levels" and
-            this->GetAttInt(varName, "topology_dimension") == 2)
+            this->GetAttInt(varId, "topology_dimension") == 2)
 	{
-          mesh2D.meshTopologyVar = varName;
+          mesh2D.meshTopologyVarId = varId;
           mesh2D.meshType = fullLevelFaceMesh;
           // Workaround for non-CF-compliant vertical axis
           mesh2D.isLFRicXIOSFile = true;
@@ -388,16 +358,16 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
         // Edge-half-level mesh in LFRic output files currently has
         // topology_dimension=2
         else if (varName == "Mesh2d_edge_half_levels" and
-                 this->GetAttInt(varName, "topology_dimension") == 2)
+                 this->GetAttInt(varId, "topology_dimension") == 2)
         {
           hasHalfLevelEdgeMesh = true;
-          meshTopologyVarEdge = varName;
+          meshTopologyVarEdgeId = varId;
         }
         // Assume that mesh is half-level type otherwise
-        else if (mesh2D.meshTopologyVar.empty() and
-                 this->GetAttInt(varName, "topology_dimension") == 2)
+        else if (mesh2D.meshTopologyVarId < 0 and
+                 this->GetAttInt(varId, "topology_dimension") == 2)
         {
-          mesh2D.meshTopologyVar = varName;
+          mesh2D.meshTopologyVarId = varId;
           mesh2D.meshType = halfLevelFaceMesh;
           mesh2D.isLFRicXIOSFile = false;
         }
@@ -406,7 +376,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   }
 
   // Must have at least one face mesh
-  if (mesh2D.meshTopologyVar.empty() or mesh2D.numTopologies == 0)
+  if (mesh2D.meshTopologyVarId < 0 or mesh2D.numTopologies == 0)
   {
     std::cerr << "GetMesh2DDescription: At least one UGRID face mesh is required.\n";
     return UGRIDMeshDescription();
@@ -431,14 +401,14 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   // Get node coordinate variables and their dimensions
   //
 
-  if (not this->VarHasAtt(mesh2D.meshTopologyVar, "node_coordinates"))
+  if (not this->VarHasAtt(mesh2D.meshTopologyVarId, "node_coordinates"))
   {
     std::cerr << "GetMesh2DDescription: UGRID topology variable must have node_coordinates attribute.\n";
     return UGRIDMeshDescription();
   }
 
   std::vector<std::string> nodeCoordVarNames =
-    this->GetAttTextSplit(mesh2D.meshTopologyVar, "node_coordinates");
+    this->GetAttTextSplit(mesh2D.meshTopologyVarId, "node_coordinates");
 
   if (nodeCoordVarNames.size() != 2)
   {
@@ -460,51 +430,52 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
     return UGRIDMeshDescription();
   }
 
-  mesh2D.nodeCoordXVar = nodeCoordVarNames[0];
-  mesh2D.nodeCoordYVar = nodeCoordVarNames[1];
+  mesh2D.nodeCoordXVarId = this->GetVarId(nodeCoordVarNames[0]);
+  mesh2D.nodeCoordYVarId = this->GetVarId(nodeCoordVarNames[1]);
 
   // Get node dimension name and length
-  mesh2D.nodeDim = this->GetVarDimName(mesh2D.nodeCoordXVar, 0);
-  mesh2D.numNodes = this->GetDimLen(mesh2D.nodeDim);
+  mesh2D.nodeDimId = this->GetVarDimId(mesh2D.nodeCoordXVarId, 0);
+  mesh2D.numNodes = this->GetDimLen(mesh2D.nodeDimId);
 
   //
   // Get face-node connectivity variable and its dimensions
   //
 
-  if (not this->VarHasAtt(mesh2D.meshTopologyVar, "face_node_connectivity"))
+  if (not this->VarHasAtt(mesh2D.meshTopologyVarId, "face_node_connectivity"))
   {
     std::cerr << "GetMesh2DDescription: UGRID topology variable must have face_node_connectivity attribute.\n";
     return UGRIDMeshDescription();
   }
 
-  mesh2D.faceNodeConnVar = this->GetAttText(mesh2D.meshTopologyVar,
-                           "face_node_connectivity");
+  const std::string faceNodeConnVar = this->GetAttText(mesh2D.meshTopologyVarId,
+                                      "face_node_connectivity");
+  mesh2D.faceNodeConnVarId = this->GetVarId(faceNodeConnVar);
 
   // Number of faces must be the first dimension, although
   // the UGRID conventions are more lenient
-  mesh2D.faceDim = this->GetVarDimName(mesh2D.faceNodeConnVar, 0);
+  mesh2D.faceDimId = this->GetVarDimId(mesh2D.faceNodeConnVarId, 0);
 
-  if (this->VarHasAtt(mesh2D.meshTopologyVar, "face_dimension"))
+  if (this->VarHasAtt(mesh2D.meshTopologyVarId, "face_dimension"))
   {
-    if (mesh2D.faceDim !=
-        this->GetAttText(mesh2D.meshTopologyVar, "face_dimension"))
+    if (mesh2D.faceDimId !=
+        this->GetDimId(this->GetAttText(mesh2D.meshTopologyVarId, "face_dimension")))
     {
       std::cerr << "GetMesh2DDescription: face_node_connectivity must have face_dimension first.\n";
       return UGRIDMeshDescription();
     }
   }
 
-  mesh2D.numFaces = this->GetDimLen(mesh2D.faceDim);
+  mesh2D.numFaces = this->GetDimLen(mesh2D.faceDimId);
 
   // Assume that number of vertices per face is the second dimension
-  mesh2D.vertDim = this->GetVarDimName(mesh2D.faceNodeConnVar, 1);
-  mesh2D.numVertsPerFace = this->GetDimLen(mesh2D.vertDim);
+  mesh2D.vertDimId = this->GetVarDimId(mesh2D.faceNodeConnVarId, 1);
+  mesh2D.numVertsPerFace = this->GetDimLen(mesh2D.vertDimId);
 
   // Correction for non-zero start index
-  if (this->VarHasAtt(mesh2D.faceNodeConnVar, "start_index"))
+  if (this->VarHasAtt(mesh2D.faceNodeConnVarId, "start_index"))
   {
     mesh2D.faceNodeStartIdx = static_cast<long long>(
-      this->GetAttInt(mesh2D.faceNodeConnVar, "start_index"));
+      this->GetAttInt(mesh2D.faceNodeConnVarId, "start_index"));
   }
 
   //
@@ -513,14 +484,14 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
   if (hasHalfLevelEdgeMesh)
   {
-    if (not this->VarHasAtt(meshTopologyVarEdge, "edge_coordinates"))
+    if (not this->VarHasAtt(meshTopologyVarEdgeId, "edge_coordinates"))
     {
       std::cerr << "GetMesh2DDescription: UGRID edge topology variable must have edge_coordinates attribute.\n";
       return UGRIDMeshDescription();
     }
 
     std::vector<std::string> edgeCoordVarNames =
-      this->GetAttTextSplit(meshTopologyVarEdge, "edge_coordinates");
+      this->GetAttTextSplit(meshTopologyVarEdgeId, "edge_coordinates");
 
     if (edgeCoordVarNames.size() != 2)
     {
@@ -542,12 +513,12 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
       return UGRIDMeshDescription();
     }
 
-    mesh2D.edgeCoordXVar = edgeCoordVarNames[0];
-    mesh2D.edgeCoordYVar = edgeCoordVarNames[1];
+    mesh2D.edgeCoordXVarId = this->GetVarId(edgeCoordVarNames[0]);
+    mesh2D.edgeCoordYVarId = this->GetVarId(edgeCoordVarNames[1]);
 
     // Get edge dimension name and length
-    mesh2D.edgeDim = this->GetVarDimName(mesh2D.edgeCoordXVar, 0);
-    mesh2D.numEdges = this->GetDimLen(mesh2D.edgeDim);
+    mesh2D.edgeDimId = this->GetVarDimId(mesh2D.edgeCoordXVarId, 0);
+    mesh2D.numEdges = this->GetDimLen(mesh2D.edgeDimId);
   }
 
   return mesh2D;
@@ -559,7 +530,6 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
                                                     const mesh2DTypes meshType)
 {
   CFVerticalAxis levels = CFVerticalAxis();
-  levels.axisVar.clear();
 
   // Workaround for LFRic XIOS output files where vertical axes do not have
   // attributes required by CF convention
@@ -567,43 +537,42 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
   {
     if (meshType == fullLevelFaceMesh and this->HasVar("full_levels"))
     {
-      levels.axisVar = "full_levels";
-      levels.axisDim = this->GetVarDimName(levels.axisVar, 0);
+      levels.axisVarId = this->GetVarId("full_levels");
+      levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
       // Need the number of cells, "full_levels" are interfaces between cells
-      levels.numLevels = this->GetDimLen(levels.axisDim) - 1;
+      levels.numLevels = this->GetDimLen(levels.axisDimId) - 1;
     }
     else if (meshType == halfLevelFaceMesh and this->HasVar("half_levels"))
     {
-      levels.axisVar = "half_levels";
-      levels.axisDim = this->GetVarDimName(levels.axisVar, 0);
-      levels.numLevels = this->GetDimLen(levels.axisDim);
+      levels.axisVarId = this->GetVarId("half_levels");
+      levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
+      levels.numLevels = this->GetDimLen(levels.axisDimId);
     }
   }
   // Assume that other input files are CF-compliant and use "positive" attribute
   // Restrict choices to "level_height" and "model_level_number"
   else
   {
-    for (std::string const &varName : this->GetVarNames())
+    for (int varId = 0; varId < this->GetNumVars(); varId++)
     {
-      if (this->VarHasAtt(varName, "positive"))
+      if (this->VarHasAtt(varId, "positive"))
       {
         // Prefer to use level_height variable if it exists
+        const std::string varName = this->GetVarName(varId);
 	if (varName == "level_height" or
-            (levels.axisVar.empty() and varName == "model_level_number"))
+            (levels.axisVarId < 0 and varName == "model_level_number"))
         {
-          levels.axisVar = varName;
-          levels.axisDim = this->GetVarDimName(levels.axisVar, 0);
-          levels.numLevels = this->GetDimLen(levels.axisDim);
+          levels.axisVarId = varId;
+          levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
+          levels.numLevels = this->GetDimLen(levels.axisDimId);
         }
       }
     }
   }
 
   // Assume 2D-only file and set vertical axis to single level if no axis found
-  if (levels.axisVar.empty())
+  if (levels.axisVarId < 0)
   {
-    levels.axisVar = "None";
-    levels.axisDim = "None";
     levels.numLevels = 1;
   }
 
@@ -618,15 +587,15 @@ CFTimeAxis netCDFLFRicFile::GetTAxisDescription()
 
   // Look for variable with standard_name = time, even though this is not
   // strictly required by CF conventions
-  for (std::string const &varName : this->GetVarNames())
+  for (int varId = 0; varId < this->GetNumVars(); varId++)
   {
-    if (this->VarHasAtt(varName, "standard_name"))
+    if (this->VarHasAtt(varId, "standard_name"))
     {
-      if (this->GetAttText(varName, "standard_name") == "time")
+      if (this->GetAttText(varId, "standard_name") == "time")
       {
-        time.axisVar = varName;
-        time.axisDim = this->GetVarDimName(time.axisVar, 0);
-        time.numTimeSteps = this->GetDimLen(time.axisDim);
+        time.axisVarId = varId;
+        time.axisDimId = this->GetVarDimId(time.axisVarId, 0);
+        time.numTimeSteps = this->GetDimLen(time.axisDimId);
       }
     }
   }
@@ -638,29 +607,29 @@ CFTimeAxis netCDFLFRicFile::GetTAxisDescription()
 
 void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
                                      const std::string & fieldLoc,
-                                     const std::string & horizontalDim,
+                                     const int horizontalDimId,
                                      const mesh2DTypes & horizontalMeshType,
-                                     const std::string & verticalDim,
-                                     const std::string & timeDim)
+                                     const int verticalDimId,
+                                     const int timeDimId)
 {
   debugMacro("Entering netCDFLFRicFile::UpdateFieldMap...\n");
 
-  for (std::string const &varName : this->GetVarNames())
+  for (int varId = 0; varId < this->GetNumVars(); varId++)
   {
-    debugMacro("Considering variable " << varName << "\n");
+    debugMacro("Considering variable " << this->GetVarName(varId) << "\n");
 
     // Require these netCDF attributes to distinguish fields from UGRID
     // variables and other data
-    bool valid = (this->VarHasAtt(varName, "standard_name") or
-                  this->VarHasAtt(varName, "long_name")) and
-                  this->VarHasAtt(varName, "mesh") and
-                  this->VarHasAtt(varName, "coordinates") and
-                  this->VarHasAtt(varName, "location");
+    bool valid = (this->VarHasAtt(varId, "standard_name") or
+                  this->VarHasAtt(varId, "long_name")) and
+                  this->VarHasAtt(varId, "mesh") and
+                  this->VarHasAtt(varId, "coordinates") and
+                  this->VarHasAtt(varId, "location");
 
     // Check if data is defined on the requested location (e.g., faces)
     if (valid)
     {
-      valid &= this->GetAttText(varName, "location") == fieldLoc;
+      valid &= this->GetAttText(varId, "location") == fieldLoc;
     }
 
     // Identify and record variable dimensions, and add field to map
@@ -670,7 +639,7 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
 
       DataField fieldSpec = DataField();
 
-      const size_t numDims = this->GetVarNumDims(varName);
+      const size_t numDims = this->GetVarNumDims(varId);
       fieldSpec.dims.resize(numDims);
 
       // Set target field location in VTK grid - currently always cell data
@@ -695,52 +664,52 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
       // Work backwards to simplify computing strides
       for (size_t iDim = numDims-1; iDim < numDims; iDim--)
       {
-        const std::string thisDim = this->GetVarDimName(varName, iDim);
+        const int thisDimId = this->GetVarDimId(varId, iDim);
 
-        // Match dim name against expected names and record specs
-        if (thisDim == horizontalDim)
+        // Match dim ID against expected names and record specs
+        if (thisDimId == horizontalDimId)
         {
           fieldSpec.hasHorizontalDim = true;
           fieldSpec.meshType = horizontalMeshType;
           fieldSpec.dims[iDim].dimType = horizontalAxisDim;
-          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDim);
+          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDimId);
           fieldSpec.dims[iDim].dimStride = stride;
           numDimsIdentified++;
           debugMacro("Found horizontal dim with length " << fieldSpec.dims[iDim].dimLength <<
                      " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
         }
-        else if (thisDim == verticalDim)
+        else if (thisDimId == verticalDimId)
         {
           fieldSpec.hasVerticalDim = true;
           fieldSpec.dims[iDim].dimType = verticalAxisDim;
-          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDim);
+          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDimId);
           fieldSpec.dims[iDim].dimStride = stride;
           numDimsIdentified++;
           debugMacro("Found vertical dim with length " << fieldSpec.dims[iDim].dimLength <<
                      " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
         }
-        else if (thisDim == timeDim)
+        else if (thisDimId == timeDimId)
         {
           fieldSpec.hasTimeDim = true;
           fieldSpec.dims[iDim].dimType = timeAxisDim;
-          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDim);
+          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDimId);
           fieldSpec.dims[iDim].dimStride = stride;
           numDimsIdentified++;
           debugMacro("Found time dim with length " << fieldSpec.dims[iDim].dimLength <<
                      " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
         }
         // Only accept one component dimension with up to 9 components
-        else if (this->GetDimLen(thisDim) < 10 and not fieldSpec.hasComponentDim)
+        else if (this->GetDimLen(thisDimId) < 10 and not fieldSpec.hasComponentDim)
         {
           fieldSpec.hasComponentDim = true;
           fieldSpec.dims[iDim].dimType = componentAxisDim;
-          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDim);
+          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDimId);
           fieldSpec.dims[iDim].dimStride = stride;
           numDimsIdentified++;
           debugMacro("Found component dim with length " << fieldSpec.dims[iDim].dimLength <<
                      " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
         }
-        stride *= this->GetDimLen(thisDim);
+        stride *= this->GetDimLen(thisDimId);
       }
 
       debugMacro("Identified " << numDimsIdentified << " of " <<
@@ -753,6 +722,7 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
 
       if (valid)
       {
+        const std::string varName = this->GetVarName(varId);
         // If field is not in list, insert and default to "don't load"
         std::map<std::string, DataField>::const_iterator it = fields.find(varName);
         if (it == fields.end())
