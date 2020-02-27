@@ -197,10 +197,10 @@ int vtkNetCDFLFRicReader::RequestInformation(
   vtkInformation *outInfo = outputVector->GetInformationObject(0);
 
   // Read time variable if applicable, and tell the pipeline
-  if (this->tAxis.numTimeSteps > 0)
+  if (this->tAxis.axisLength > 0)
   {
     this->TimeSteps = inputFile.GetVarDouble(this->tAxis.axisVarId, {0},
-                                             {this->tAxis.numTimeSteps});
+                                             {this->tAxis.axisLength});
 
     // Tell the pipeline which steps are available and their range
     outInfo->Set(vtkStreamingDemandDrivenPipeline::TIME_STEPS(),
@@ -279,11 +279,11 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   vtkDebugMacro("piece=" << piece << " numPieces=" << numPieces <<
                 " numGhosts=" << numGhosts << endl);
 
-  if (numPieces > this->zAxis.numLevels)
+  if (numPieces > this->zAxis.axisLength)
   {
     vtkErrorMacro("Pipeline requested " << numPieces <<
                   " pieces but reader can only provide " <<
-                  this->zAxis.numLevels << endl);
+                  this->zAxis.axisLength << endl);
     return 0;
   }
 
@@ -291,8 +291,8 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // is a non-zero remainder, add one layer to first few pieces
   // Use int here to handle potentially negative results when
   // ghost layers are added.
-  int numLevels = this->zAxis.numLevels/numPieces;
-  int remainder = this->zAxis.numLevels%numPieces;
+  int numLevels = this->zAxis.axisLength/numPieces;
+  int remainder = this->zAxis.axisLength%numPieces;
   int startLevel = numLevels*piece + remainder;
   if (piece < remainder)
   {
@@ -305,7 +305,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // We need to mark ghost cells in VTK grid, so keep track of
   // ghost levels
   int numGhostsBelow = std::min(numGhosts, startLevel);
-  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->zAxis.numLevels)-
+  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->zAxis.axisLength)-
                                 (startLevel+numLevels));
   startLevel -= numGhostsBelow;
   numLevels += numGhostsBelow + numGhostsAbove;
@@ -316,7 +316,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
 
   // Sanity checks
   size_t stopLevel = static_cast<size_t>(startLevel+numLevels);
-  if ((startLevel < 0) || (stopLevel > this->zAxis.numLevels))
+  if ((startLevel < 0) || (stopLevel > this->zAxis.axisLength))
   {
     vtkErrorMacro("Erroneous level range encountered: " << startLevel <<
                   "..." << (stopLevel-1) << endl);
@@ -440,7 +440,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   std::vector<double> levels;
   // Treat 2D case as a single 3D layer
-  if (this->UseIndexAsVertCoord or this->zAxis.numLevels == 1)
+  if (this->UseIndexAsVertCoord or this->zAxis.axisLength == 1)
   {
     // Use level indices
     levels.resize(numLevels+1);
@@ -458,14 +458,14 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   else if (this->mesh2D.meshType == halfLevelFaceMesh)
   {
     std::vector<double> halfLevels = inputFile.GetVarDouble(this->zAxis.axisVarId,
-                                     {0}, {this->zAxis.numLevels});
+                                     {0}, {this->zAxis.axisLength});
 
     // Extrapolate half-level heights at both ends
     const double firstLevel = 2.0*halfLevels[0]-halfLevels[1];
     halfLevels.insert(halfLevels.begin(),firstLevel);
 
-    const double lastLevel = 2.0*halfLevels[this->zAxis.numLevels-1] -
-                                 halfLevels[this->zAxis.numLevels-2];
+    const double lastLevel = 2.0*halfLevels[this->zAxis.axisLength-1] -
+                                 halfLevels[this->zAxis.axisLength-2];
     halfLevels.push_back(lastLevel);
 
     // Vertices are in the middle between half-level heights
@@ -612,7 +612,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   //
 
   std::vector<double> levels;
-  if (this->UseIndexAsVertCoord or this->zAxis.numLevels == 1)
+  if (this->UseIndexAsVertCoord or this->zAxis.axisLength == 1)
   {
     levels.resize(numLevels);
     for (size_t idx = 0; idx < numLevels; idx++)

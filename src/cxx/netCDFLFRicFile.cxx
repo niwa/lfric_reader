@@ -526,10 +526,10 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
 //----------------------------------------------------------------------------
 
-CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
-                                                    const mesh2DTypes meshType)
+CFAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
+                                            const mesh2DTypes meshType)
 {
-  CFVerticalAxis levels = CFVerticalAxis();
+  CFAxis levels = CFAxis();
 
   // Workaround for LFRic XIOS output files where vertical axes do not have
   // attributes required by CF convention
@@ -540,13 +540,13 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
       levels.axisVarId = this->GetVarId("full_levels");
       levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
       // Need the number of cells, "full_levels" are interfaces between cells
-      levels.numLevels = this->GetDimLen(levels.axisDimId) - 1;
+      levels.axisLength = this->GetDimLen(levels.axisDimId) - 1;
     }
     else if (meshType == halfLevelFaceMesh and this->HasVar("half_levels"))
     {
       levels.axisVarId = this->GetVarId("half_levels");
       levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
-      levels.numLevels = this->GetDimLen(levels.axisDimId);
+      levels.axisLength = this->GetDimLen(levels.axisDimId);
     }
   }
   // Assume that other input files are CF-compliant and use "positive" attribute
@@ -564,7 +564,7 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
         {
           levels.axisVarId = varId;
           levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
-          levels.numLevels = this->GetDimLen(levels.axisDimId);
+          levels.axisLength = this->GetDimLen(levels.axisDimId);
         }
       }
     }
@@ -573,7 +573,7 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
   // Assume 2D-only file and set vertical axis to single level if no axis found
   if (levels.axisVarId < 0)
   {
-    levels.numLevels = 1;
+    levels.axisLength = 1;
   }
 
   return levels;
@@ -581,9 +581,9 @@ CFVerticalAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
 
 //----------------------------------------------------------------------------
 
-CFTimeAxis netCDFLFRicFile::GetTAxisDescription()
+CFAxis netCDFLFRicFile::GetTAxisDescription()
 {
-  CFTimeAxis time = CFTimeAxis();
+  CFAxis time = CFAxis();
 
   // Look for variable with standard_name = time, even though this is not
   // strictly required by CF conventions
@@ -595,7 +595,7 @@ CFTimeAxis netCDFLFRicFile::GetTAxisDescription()
       {
         time.axisVarId = varId;
         time.axisDimId = this->GetVarDimId(time.axisVarId, 0);
-        time.numTimeSteps = this->GetDimLen(time.axisDimId);
+        time.axisLength = this->GetDimLen(time.axisDimId);
       }
     }
   }

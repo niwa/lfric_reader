@@ -110,8 +110,8 @@ private:
   std::vector<double> TimeSteps;
 
   UGRIDMeshDescription mesh2D;
-  CFVerticalAxis zAxis;
-  CFTimeAxis tAxis;
+  CFAxis zAxis;
+  CFAxis tAxis;
 
 };
 #endif

@@ -66,29 +66,16 @@ struct UGRIDMeshDescription
     faceNodeStartIdx(0) {}
 };
 
-// Holds metadata for vertical axis in VTK grid
-struct CFVerticalAxis
+// Holds metadata for vertical and time axes
+struct CFAxis
 {
-  // Axis length (number of cells in the vertical)
-  size_t numLevels;
+  size_t axisLength;
 
   // NetCDF dimension and variable IDs
   int axisDimId;
   int axisVarId;
 
-  CFVerticalAxis() : numLevels(0), axisDimId(-1), axisVarId(-1) {}
-};
-
-// Holds metadata for time axis
-struct CFTimeAxis
-{
-  size_t numTimeSteps;
-
-  // NetCDF dimension and variable IDs
-  int axisDimId;
-  int axisVarId;
-
-  CFTimeAxis() : numTimeSteps(0), axisDimId(-1), axisVarId(-1) {}
+  CFAxis() : axisLength(0), axisDimId(-1), axisVarId(-1) {}
 };
 
 // Holds metadata for field variable dimensions
@@ -171,10 +158,10 @@ public:
 
   UGRIDMeshDescription GetMesh2DDescription();
 
-  CFVerticalAxis GetZAxisDescription(const bool isLFRicXIOSFile,
-                                     const mesh2DTypes meshType);
+  CFAxis GetZAxisDescription(const bool isLFRicXIOSFile,
+                             const mesh2DTypes meshType);
 
-  CFTimeAxis GetTAxisDescription();
+  CFAxis GetTAxisDescription();
 
   void UpdateFieldMap(std::map<std::string, DataField> & fields,
                       const std::string & fieldLoc,

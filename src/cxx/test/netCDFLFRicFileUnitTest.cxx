@@ -219,8 +219,8 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
 
   SECTION( "GetZAxisDescription Returns Correct Result For Full-Level LFRic File" )
   {
-    CFVerticalAxis result = ncFile.GetZAxisDescription(true, fullLevelFaceMesh);
-    REQUIRE( result.numLevels == 3 );
+    CFAxis result = ncFile.GetZAxisDescription(true, fullLevelFaceMesh);
+    REQUIRE( result.axisLength == 3 );
     const std::string axisDim = ncFile.GetDimName(result.axisDimId);
     REQUIRE( axisDim == "full_levels" );
     const std::string axisVar = ncFile.GetVarName(result.axisVarId);
@@ -229,8 +229,8 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
 
   SECTION( "GetZAxisDescription Returns Correct Result For Half-Level LFRic File" )
   {
-    CFVerticalAxis result = ncFile.GetZAxisDescription(true, halfLevelFaceMesh);
-    REQUIRE( result.numLevels == 3 );
+    CFAxis result = ncFile.GetZAxisDescription(true, halfLevelFaceMesh);
+    REQUIRE( result.axisLength == 3 );
     const std::string axisDim = ncFile.GetDimName(result.axisDimId);
     REQUIRE( axisDim == "half_levels" );
     const std::string axisVar = ncFile.GetVarName(result.axisVarId);
@@ -239,28 +239,28 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
 
   SECTION( "GetZAxisDescription Returns No Axis For Non-LFRic File" )
   {
-    CFVerticalAxis result = ncFile.GetZAxisDescription(false, halfLevelFaceMesh);
-    REQUIRE( result.numLevels == 1 );
+    CFAxis result = ncFile.GetZAxisDescription(false, halfLevelFaceMesh);
+    REQUIRE( result.axisLength == 1 );
     REQUIRE( result.axisDimId == -1 );
     REQUIRE( result.axisVarId == -1 );
   }
 
   SECTION( "GetZAxisDescription Returns No Axis For Unknown Mesh" )
   {
-    CFVerticalAxis result = ncFile.GetZAxisDescription(false, unknownMesh);
-    REQUIRE( result.numLevels == 1 );
+    CFAxis result = ncFile.GetZAxisDescription(false, unknownMesh);
+    REQUIRE( result.axisLength == 1 );
     REQUIRE( result.axisDimId == -1 );
     REQUIRE( result.axisVarId == -1 );
     result = ncFile.GetZAxisDescription(true, unknownMesh);
-    REQUIRE( result.numLevels == 1 );
+    REQUIRE( result.axisLength == 1 );
     REQUIRE( result.axisDimId == -1 );
     REQUIRE( result.axisVarId == -1 );
   }
 
   SECTION( "GetTAxisDescription Returns No Axis" )
   {
-    CFTimeAxis result = ncFile.GetTAxisDescription();
-    REQUIRE( result.numTimeSteps == 0 );
+    CFAxis result = ncFile.GetTAxisDescription();
+    REQUIRE( result.axisLength == 0 );
     REQUIRE( result.axisDimId == -1 );
     REQUIRE( result.axisVarId == -1 );
   }
