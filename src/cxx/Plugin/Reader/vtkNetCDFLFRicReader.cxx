@@ -539,21 +539,28 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   vtkDebugMacro("Setting VTK cells..." << endl);
 
-  vtkSmartPointer<vtkCellArray> cells = vtkSmartPointer<vtkCellArray>::New();
-  cells->SetNumberOfCells(numLevels*this->mesh2D.numFaces);
+  // Build up grid cells for this piece vertical layer-wise
+  grid->Allocate(static_cast<vtkIdType>(this->mesh2D.numFaces*numLevels));
 
-  vtkDataArray * cellConnect = cells->GetData();
-  cellConnect->SetNumberOfTuples(numLevels*this->mesh2D.numFaces*
-                                 (2*this->mesh2D.numVertsPerFace+1));
-
-  SetConnectivityWorker connectWorker(faceNodes, numLevels, this->mesh2D.numFaces,
-                                      this->mesh2D.numVertsPerFace, numNodesCurrent);
-  typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Integrals> cellsDispatcher;
-  if (!cellsDispatcher::Execute(cellConnect, connectWorker))
+  // Use InsertNextCell method, vtkArrayDispatch provides little performance benefit
+  std::vector<vtkIdType> cellVerts;
+  cellVerts.resize(2*this->mesh2D.numVertsPerFace);
+  for (size_t iLevel = 0; iLevel < numLevels; iLevel++)
   {
-    connectWorker(cellConnect);
+    for (size_t iFace = 0; iFace < this->mesh2D.numFaces; iFace++)
+    {
+      for (size_t iVertex = 0; iVertex < this->mesh2D.numVertsPerFace; iVertex++)
+      {
+        cellVerts[iVertex] = static_cast<vtkIdType>(
+                             faceNodes[iFace*this->mesh2D.numVertsPerFace+iVertex] +
+                             iLevel*numNodesCurrent);
+        cellVerts[iVertex+this->mesh2D.numVertsPerFace] = static_cast<vtkIdType>(
+                             cellVerts[iVertex]+numNodesCurrent);
+      }
+      grid->InsertNextCell(VTK_HEXAHEDRON,
+        static_cast<vtkIdType>(2*this->mesh2D.numVertsPerFace), cellVerts.data());
+    }
   }
-  grid->SetCells(VTK_HEXAHEDRON, cells);
 
   // Mark ghost cells as "duplicate cell"
   if (numGhostsAbove > 0 || numGhostsBelow > 0)

@@ -1,0 +1,8 @@
+NAME
+  netCDFLFRicReader
+DESCRIPTION
+  Enables reading output from the LFRic code in ParaView.
+REQUIRES_MODULES
+  VTK::CommonCore
+  VTK::CommonExecutionModel
+  VTK::netcdf

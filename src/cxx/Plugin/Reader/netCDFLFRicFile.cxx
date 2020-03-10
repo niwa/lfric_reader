@@ -119,12 +119,21 @@ int netCDFLFRicFile::GetVarId(const std::string& varName)
 
 std::string netCDFLFRicFile::GetVarName(const int varId)
 {
-  // NetCDF variables can use up to NC_MAX_NAME bytes
-  char *varName = new char[NC_MAX_NAME+1];
-  ncErrorMacro(nc_inq_varname(this->ncId, varId, varName));
-  const std::string varNameStr(varName);
-  delete[] varName;
-  return varNameStr;
+  // Valid netCDF IDs start at 0
+  if (varId >= 0)
+  {
+    // NetCDF variables can use up to NC_MAX_NAME bytes
+    char *varName = new char[NC_MAX_NAME+1];
+    ncErrorMacro(nc_inq_varname(this->ncId, varId, varName));
+    const std::string varNameStr(varName);
+    delete[] varName;
+    return varNameStr;
+  }
+  else
+  {
+    const std::string varNameStr("invalid varId");
+    return varNameStr;
+  }
 }
 
 //----------------------------------------------------------------------------

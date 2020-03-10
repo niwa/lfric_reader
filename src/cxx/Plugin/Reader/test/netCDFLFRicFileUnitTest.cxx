@@ -65,10 +65,15 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
     REQUIRE( ncFile.GetVarId("var1") == 19 );
   }
 
-  SECTION( "GetVarName Works" )
+  SECTION( "GetVarName With Valid VarId Works" )
   {
     const int varId = ncFile.GetVarId("var1");
     REQUIRE( ncFile.GetVarName(varId) == "var1" );
+  }
+
+  SECTION( "GetVarName With Invalid VarId Works" )
+  {
+    REQUIRE( ncFile.GetVarName(-1) == "invalid varId" );
   }
 
   SECTION( "GetVarNumDims Works" )

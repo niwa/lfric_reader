@@ -1,0 +1,7 @@
+NAME
+  vtkNetCDFLFRicReader
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonExecutionModel
+PRIVATE_DEPENDS
+  VTK::netcdf

@@ -79,60 +79,6 @@ private:
   const bool cartCoords;
 };
 
-// Functor for setting a vtkDataArray with cell connectivities
-// in layer-first ordering
-struct SetConnectivityWorker
-{
-public:
-
-  SetConnectivityWorker(const std::vector<long long> & faceNode,
-                        const size_t nLevels,
-                        const size_t nFaces,
-                        const size_t nVertsPerFace,
-                        const size_t nNodes) :
-    faceNodeConnect(faceNode), numLevels(nLevels), numFaces(nFaces),
-    numVertsPerFace(nVertsPerFace), numNodes(nNodes) {}
-
-  template <typename ConnectArray>
-  void operator()(ConnectArray * cellConnect)
-  {
-    VTK_ASSUME(cellConnect->GetNumberOfComponents() == 1);
-    vtkDataArrayAccessor<ConnectArray> c(cellConnect);
-
-    // Cell definitions are a flat list with format
-    // Number of points n, point ID 1, ..., point ID n
-    vtkIdType cellIdx = 0;
-    for (size_t iLevel = 0; iLevel < numLevels; iLevel++)
-    {
-      const long long levelOffset = static_cast<long long>(iLevel*numNodes);
-      for (size_t iFace = 0; iFace < numFaces; iFace++)
-      {
-        c.Set(cellIdx, 0, static_cast<vtkIdType>(2*numVertsPerFace));
-        const size_t faceBaseIdx = iFace*numVertsPerFace;
-    	cellIdx++;
-    	for (size_t iVertex = 0; iVertex < numVertsPerFace; iVertex++)
-    	{
-          const vtkIdType pointId = static_cast<vtkIdType>(
-            faceNodeConnect[faceBaseIdx+iVertex] + levelOffset);
-          c.Set(cellIdx, 0, pointId);
-          c.Set(cellIdx+static_cast<vtkIdType>(numVertsPerFace), 0,
-                pointId+static_cast<vtkIdType>(numNodes));
-    	  cellIdx++;
-    	}
-        cellIdx += static_cast<vtkIdType>(numVertsPerFace);
-      }
-    }
-  }
-
-private:
-
-  const std::vector<long long> & faceNodeConnect;
-  const size_t numLevels;
-  const size_t numFaces;
-  const size_t numVertsPerFace;
-  const size_t numNodes;
-};
-
 void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
                          std::vector<double> & nodeCoordsY,
                          std::vector<long long> & faceNodeConnectivity,
