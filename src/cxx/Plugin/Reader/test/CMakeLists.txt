@@ -15,7 +15,10 @@ if (ParaView_VERSION GREATER_EQUAL 5.7)
   # need to build additional shared library for testing
   set(lib_SRCS ../vtkNetCDFLFRicReader.cxx ../netCDFLFRicFile.cxx ../netCDFLFRicReaderUtils.cxx)
   add_library(netCDFLFRicReaderShared ${lib_SRCS})
-  target_link_libraries(netCDFLFRicReaderShared PRIVATE VTK::netcdf)
+  target_link_libraries(netCDFLFRicReaderShared PRIVATE
+    VTK::netcdf
+    VTK::CommonCore
+    VTK::CommonExecutionModel)
 
   target_link_libraries(netCDFLFRicReader_tests PRIVATE
     netCDFLFRicReaderShared
