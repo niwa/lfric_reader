@@ -69,3 +69,31 @@ To operate the LFRic reader in parallel, you will need to build ParaView with MP
 mpiexec -np <number of processes> pvserver
 ```
 The server will report its port number (the default is 11111) and wait for a connection. Launch the GUI and connect it to the server by clicking on "Connect" in the toolbar. Create a new connection, entering the server hostname, e.g., "localhost" if you run the server on the same machine as the GUI or if you use an ssh tunnel, as well as the server port number. If the server connection is successful, the server name in the "Pipeline Browser" should change from "builtin:" to the server name, and you will see the file space accessible to the server when you try to open a file.
+
+## Singularity Container
+
+The repository includes a Singularity container definition file ```Singularity``` that provides a recent version of ParaView together with the LFRic reader plugin. Note that only a "headless" version of ParaView will currently be built providing ParaView server and ParaView Python. Please refer to the instructions below on how to use the container.
+
+Build the container first using
+```
+singularity build lfric_reader.sif Singularity
+```
+Note that this usually requires root privileges. Once container build has finished, you can run a ParaView Python script using
+```
+singularity exec lfric_reader.sif pvpython myscript.py
+```
+If you want to use the container with the ParaView GUI, you'll need to download a ParaView executable from paraview.org (make sure that you download the exact same version that is used in the container!) and launch the container using
+```
+singularity exec lfric_reader.sif pvserver
+```
+Lauch the GUI and connect to the server from the GUI by clicking on "Connect" in the toolbar. If the container runs on the same host, create a connection to ```localhost``` with port number ```11111``` and connect to the server. If it runs on a different host, you'll need to create an ssh tunnel first and forward port ```11111``` to localhost, then create a connection to ```localhost``` - `11111`.
+
+It is also possible to run the container with MPI parallelisation. If a single host is sufficient, launch the container using
+```
+singularity exec lfric_reader.sif mpiexec -np <number of ranks> pvserver
+```
+If more than one host is needed, launch the container with the same MPI distribution that was used to build ParaView inside (currently MPICH - it should be straightforward to switch to, e.g., OpenMPI in the Singularity definition file and rebuild the container),
+```
+mpiexec -np <number of ranks> singularity exec lfric_reader.sif pvserver
+```
+This should also work with a job submission system such as Slurm, provided that the underlying MPI distribution matches the one used inside the container.
