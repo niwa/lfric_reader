@@ -251,6 +251,7 @@ bool netCDFLFRicFile::VarHasAtt(const int varId, const std::string& attName)
   {
     ncErrorMacro(result);
   }
+  return false;
 }
 
 //----------------------------------------------------------------------------

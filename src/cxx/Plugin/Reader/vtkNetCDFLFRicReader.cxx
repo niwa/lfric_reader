@@ -728,7 +728,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
 
   if (grid == nullptr)
   {
-    vtkErrorMacro("Grid data structure not available." << endl);
+    vtkErrorMacro("LoadFields: Grid data structure not available." << endl);
     return 0;
   }
 
@@ -803,7 +803,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
             break;
 
           default:
-            vtkErrorMacro("Unknown field dimension." << endl);
+            vtkErrorMacro("LoadFields: Unknown field dimension." << endl);
             return 0;
         }
         vtkDebugMacro("Dim " << dimIdx << " of " << numFieldDims << ": load " <<
@@ -875,6 +875,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
           }
           break;
         case fullLevelFaceMesh :
+        {
           vtkDebugMacro("full level face mesh: averaging top and bottom faces" << endl);
           dataField->SetNumberOfTuples(numLevels*this->mesh2D.numFaces);
           const size_t numLevelsFull = numLevels+1;
@@ -893,6 +894,10 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
             }
           }
           break;
+        }
+        default :
+          vtkErrorMacro("LoadFields: Unknown mesh type." << endl);
+          return 0;
       }
 
       if (fieldSpec.location == cellFieldLoc)

@@ -48,15 +48,13 @@ The reader will send error messages to the error console in the ParaView GUI, an
 
 The reader currently includes the following features:
 * Visualisation of LFRic fields that are stored in the "full-level" and "half-level" grids
+* Fields that are stored on "edge-half-level" grids can be visualised as points and glyphs (e.g., arrows)
 * Visualisation using Cartesian coordinates and longitude-latitude-radius coordinates
 * Automatic handling of periodic grids (vertices are automatically mirrored)
 * Support for very large data files using parallel operation
 
 Limitations:
 * Fields on "full-level" grids are interpolated onto "half-level" grids using nearest-neighbour averaging, resulting in cell-based VTK data
-* Fields that are stored on "edge" grids are not yet fully supported
-* Vector fields are not yet recognised and appear as scalar component fields
-* Vector components are not yet transformed to Cartesian coordinates
 
 ## Parallelisation
 
