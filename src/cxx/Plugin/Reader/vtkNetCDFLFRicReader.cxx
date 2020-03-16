@@ -735,6 +735,13 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
   this->SetProgressText("Loading Field Data");
   this->UpdateProgress(0.0);
 
+  // Count number of requested ("active") fields for progress meter
+  int fieldCountActive = 0;
+  for (std::pair<std::string, DataField> const &field : fields)
+  {
+    if (field.second.active) fieldCountActive++;
+  }
+
   int fieldCount = 0;
   for (std::pair<std::string, DataField> const &field : fields)
   {
@@ -747,26 +754,23 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
 
       vtkDebugMacro("Reading variable " << fieldName << endl);
 
-      std::vector<double> read_buffer;
-      std::vector<size_t> start;
-      std::vector<size_t> count;
-
       const size_t numFieldDims = fieldSpec.dims.size();
-      start.resize(numFieldDims);
-      count.resize(numFieldDims);
+      std::vector<size_t> start(numFieldDims);
+      std::vector<size_t> count(numFieldDims);
 
-      // Number of vertical levels is imposed by numLevels
       // Number of timesteps to be read is always 1
+      // Number of vertical levels to be read is imposed by numLevels
       size_t numHorizontal = 1;
       size_t numComponents = 1;
 
       // Need strides for flexible dimension ordering
-      size_t componentStride = 1;
-      size_t horizontalStride = 1;
-      size_t verticalStride = 1;
+      size_t componentStride = 0;
+      size_t horizontalStride = 0;
+      size_t verticalStride = 0;
 
       // Retrieve field dimensions and strides
       // Horizontal and component dimensions are always read in full
+      size_t totalCount = 1;
       for (size_t dimIdx = 0; dimIdx < numFieldDims; dimIdx++)
       {
         switch (fieldSpec.dims[dimIdx].dimType)
@@ -806,98 +810,115 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
             vtkErrorMacro("LoadFields: Unknown field dimension." << endl);
             return 0;
         }
+        totalCount *= count[dimIdx];
         vtkDebugMacro("Dim " << dimIdx << " of " << numFieldDims << ": load " <<
                       count[dimIdx] << " of " << fieldSpec.dims[dimIdx].dimLength <<
                       " elements at index " << start[dimIdx] << "\n");
       }
 
-      // Read data if field has a vertical dimension, or if this piece
-      // contains the surface level
-      if (fieldSpec.hasVerticalDim or (startLevel == 0))
+      // Disable component dimension if not present in the data
+      if (not fieldSpec.hasComponentDim)
       {
-        read_buffer = inputFile.GetVarDouble(fieldNameVarId, start, count);
+        componentStride = totalCount;
+        vtkDebugMacro("Disabling component dim, stride=" << componentStride << endl);
       }
 
-      // Fill remaining space with NaNs if vertical dimension not present (2D fields)
+      // Disable vertical dimension if not present in the data
       if (not fieldSpec.hasVerticalDim)
       {
-        // Vertical dimension is outermost
-        verticalStride = numHorizontal*numComponents;
-
-        if (fieldSpec.meshType == halfLevelFaceMesh)
-        {
-          read_buffer.resize(numLevels*numHorizontal*numComponents,
-                             std::numeric_limits<double>::quiet_NaN());
-        }
-        else if (fieldSpec.meshType == fullLevelFaceMesh)
-        {
-          read_buffer.resize((numLevels+1)*numHorizontal*numComponents,
-                             std::numeric_limits<double>::quiet_NaN());
-        }
+        verticalStride = totalCount;
+        vtkDebugMacro("Disabling vertical dim, stride=" << verticalStride << endl);
       }
 
-      // Disable component dimension if not present by setting stride to full
-      // (possibly resized) buffer size
-      if (not fieldSpec.hasComponentDim) componentStride = read_buffer.size();
+      vtkDebugMacro("Component dim length/stride=" << numComponents << "/" << componentStride <<
+                    " Horizontal dim length/stride=" << numHorizontal << "/" << horizontalStride <<
+                    " Vertical dim length/stride=" << numLevels << "/" << verticalStride << endl);
 
-      vtkDebugMacro("Setting vtkDoubleArray for this field..." << endl);
-
-      // Create vtkDoubleArray for field data, vector components are stored separately
-      vtkSmartPointer<vtkDoubleArray> dataField = vtkSmartPointer<vtkDoubleArray>::New();
-      dataField->SetNumberOfComponents(numComponents);
-      dataField->SetName(fieldName.c_str());
-
-      // Sort data into VTK data structure
-      switch(fieldSpec.meshType)
+      // Sanity check
+      if (componentStride <= 0 or horizontalStride <= 0 or verticalStride <= 0)
       {
-        case halfLevelEdgeMesh :
-          vtkDebugMacro("half level edge mesh: no interpolation needed" << endl);
-          dataField->SetNumberOfTuples(numLevels*this->mesh2D.numEdges);
-          for (size_t bufferIdx = 0; bufferIdx < read_buffer.size(); bufferIdx++)
-          {
-            const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
-            const size_t iVertical = bufferIdx/verticalStride % numLevels;
-            const size_t iComponent = bufferIdx/componentStride % numComponents;
-            const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
-            dataField->SetComponent(iCell, iComponent, read_buffer[bufferIdx]);
-          }
-          break;
-        case halfLevelFaceMesh :
-          vtkDebugMacro("half level face mesh: no interpolation needed" << endl);
-          dataField->SetNumberOfTuples(numLevels*this->mesh2D.numFaces);
-          for (size_t bufferIdx = 0; bufferIdx < read_buffer.size(); bufferIdx++)
-          {
-            const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
-            const size_t iVertical = bufferIdx/verticalStride % numLevels;
-            const size_t iComponent = bufferIdx/componentStride % numComponents;
-            const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
-            dataField->SetComponent(iCell, iComponent, read_buffer[bufferIdx]);
-          }
-          break;
-        case fullLevelFaceMesh :
+        vtkErrorMacro("LoadFields: dimension error in field " << fieldName << endl);
+        return 0;
+      }
+
+      // Create vtkDoubleArray for field data and fill with NaNs
+      // (needed for surface fields)
+      vtkSmartPointer<vtkDoubleArray> dataField = vtkSmartPointer<vtkDoubleArray>::New();
+      dataField->SetName(fieldName.c_str());
+      dataField->SetNumberOfComponents(numComponents);
+      dataField->SetNumberOfTuples(numLevels*numHorizontal);
+      dataField->Fill(std::numeric_limits<double>::quiet_NaN());
+
+      // Read only if there is data for this subdomain - either if field has vertical
+      // dim or if this subdomain includes the surface level
+      if (fieldSpec.hasVerticalDim or (startLevel == 0))
+      {
+        // Check if we can allow netCDF to write data directly into memory buffer
+        const bool directLoad =
+          (not fieldSpec.hasVerticalDim or (verticalStride > horizontalStride)) and
+          (not fieldSpec.hasComponentDim or (horizontalStride > componentStride)) and
+          (fieldSpec.meshType == halfLevelEdgeMesh or fieldSpec.meshType == halfLevelFaceMesh);
+
+        vtkDebugMacro("Field can be loaded directly: " << directLoad << endl);
+
+        if (directLoad)
         {
-          vtkDebugMacro("full level face mesh: averaging top and bottom faces" << endl);
-          dataField->SetNumberOfTuples(numLevels*this->mesh2D.numFaces);
-          const size_t numLevelsFull = numLevels+1;
-          for (size_t bufferIdx = 0; bufferIdx < read_buffer.size(); bufferIdx++)
+          // Check buffer size
+          if (totalCount > (numLevels*numHorizontal*numComponents))
           {
-            const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
-            const size_t iVertical = bufferIdx/verticalStride % numLevelsFull;
-            const size_t iComponent = bufferIdx/componentStride % numComponents;
-            const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
-            // Skip the last full-level as we are averaging onto half-levels
-            if (iVertical < numLevels)
-            {
-              const double fieldValue = 0.5*(read_buffer[bufferIdx]+
-                                             read_buffer[bufferIdx+verticalStride]);
-              dataField->SetComponent(iCell, iComponent, fieldValue);
-            }
+            vtkErrorMacro("LoadFields: buffer to small for field " << fieldName << endl);
+            return 0;
           }
-          break;
+          // Let netCDF write directly into vtkArray buffer - this requires dataField
+          // to have AOS ordering in memory
+          double* bufferPtr = static_cast<double*>(dataField->GetVoidPointer(0));
+          inputFile.LoadVarDouble(fieldNameVarId, start, count, bufferPtr);
         }
-        default :
-          vtkErrorMacro("LoadFields: Unknown mesh type." << endl);
-          return 0;
+        else
+        {
+          // Use a temporary buffer and copy data out after reading
+          const std::vector<double> readBuffer =
+            inputFile.GetVarDouble(fieldNameVarId, start, count);
+
+          // Sort data into VTK data structure
+          switch(fieldSpec.meshType)
+          {
+            case halfLevelEdgeMesh:
+            case halfLevelFaceMesh:
+              for (size_t bufferIdx = 0; bufferIdx < readBuffer.size(); bufferIdx++)
+              {
+                const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
+                const size_t iVertical = bufferIdx/verticalStride % numLevels;
+                const size_t iComponent = bufferIdx/componentStride % numComponents;
+                const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
+                dataField->SetComponent(iCell, iComponent, readBuffer[bufferIdx]);
+              }
+              break;
+            case fullLevelFaceMesh :
+            {
+              vtkDebugMacro("full level face mesh: averaging top and bottom faces" << endl);
+              const size_t numLevelsFull = numLevels+1;
+              for (size_t bufferIdx = 0; bufferIdx < readBuffer.size(); bufferIdx++)
+              {
+                const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
+                const size_t iVertical = bufferIdx/verticalStride % numLevelsFull;
+                const size_t iComponent = bufferIdx/componentStride % numComponents;
+                const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
+                // Skip the last full-level as we are averaging onto half-levels
+                if (iVertical < numLevels)
+                {
+                  const double fieldValue = 0.5*(readBuffer[bufferIdx]+
+                                                 readBuffer[bufferIdx+verticalStride]);
+                  dataField->SetComponent(iCell, iComponent, fieldValue);
+                }
+              }
+              break;
+            }
+            default:
+              vtkErrorMacro("LoadFields: Unknown mesh type." << endl);
+              return 0;
+          }
+        }
       }
 
       if (fieldSpec.location == cellFieldLoc)
@@ -915,7 +936,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
 
       fieldCount++;
       this->UpdateProgress(static_cast<float>(fieldCount)/
-                           static_cast<float>(fields.size()));
+                           static_cast<float>(fieldCountActive));
     }
   }
 

@@ -148,6 +148,11 @@ public:
 
   size_t GetNumVars();
 
+  void LoadVarDouble(const int varId,
+                     const std::vector<size_t>& start,
+                     const std::vector<size_t>& count,
+                     double* buffer);
+
   std::vector<double> GetVarDouble(const int varId,
                                    const std::vector<size_t>& start,
                                    const std::vector<size_t>& count);

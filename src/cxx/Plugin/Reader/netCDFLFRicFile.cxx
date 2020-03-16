@@ -265,6 +265,29 @@ size_t netCDFLFRicFile::GetNumVars()
 
 //----------------------------------------------------------------------------
 
+void netCDFLFRicFile::LoadVarDouble(const int varId,
+                                    const std::vector<size_t>& start,
+                                    const std::vector<size_t>& count,
+                                    double* buffer)
+{
+  // Check if number of dimensions matches netCDF variable
+  const int numDims = this->GetVarNumDims(varId);
+  if (numDims != start.size() or numDims != count.size())
+  {
+    std::cerr << "netCDFLFRicFile::LoadVarDouble: number of dimensions does not match netCDF variable.\n";
+  }
+  else
+  {
+    // NetCDF will automatically convert non-double numeric data into double
+    // This function will also check index ranges automatically
+    ncErrorMacro(nc_get_vara_double(this->ncId, varId, start.data(),
+                                    count.data(), buffer));
+  }
+
+}
+
+//----------------------------------------------------------------------------
+
 std::vector<double> netCDFLFRicFile::GetVarDouble(
                     const int varId,
                     const std::vector<size_t>& start,
