@@ -1,6 +1,15 @@
 Bootstrap: docker
 From: ubuntu:18.04
 
+%labels
+    Author wolfgang.hayek@niwa.co.nz
+
+%help
+    This container provides a "headless" version of ParaView (only ParaView Server
+    and ParaView Python, does not include a GUI and does not require an X context
+    at runtime) with a reader plugin for output from the LFRic code. It also provides
+    Iris (scitools.org.uk/iris) and essential Python packages.
+
 %environment
 
     # Required for auto-loading the netCDFLFRicReader plugin
@@ -17,7 +26,24 @@ From: ubuntu:18.04
     dpkg-reconfigure --frontend noninteractive tzdata
 
     apt-get install -y xz-utils pkg-config python3-dev python3-numpy python3-matplotlib \
-                       wget make cmake libmpich-dev libosmesa6-dev git
+                       git wget make cmake libmpich-dev libosmesa6-dev libtbb-dev \
+                       libnetcdf-dev libhdf5-dev \
+                       unzip libgeos-dev libproj-dev libudunits2-dev python3-pip python3-setuptools \
+                       cython3 python3-cartopy python3-netcdf4 python3-scipy python3-toolz \
+                       python3-pandas
+
+    # Pyke is required by Iris but not available through package managers
+    wget https://sourceforge.net/projects/pyke/files/pyke/1.1.1/pyke3-1.1.1.zip
+    echo "a7d12d66d4c2ec12576a8187d3001384 pyke3-1.1.1.zip" | md5sum --check
+    unzip pyke3-1.1.1.zip
+    cd pyke-1.1.1
+    python3 setup.py install
+    cd ..
+    rm -r pyke-1.1.1 pyke3-1.1.1.zip
+
+    # These are not available/recent enough on RPMs
+    # Install without dependencies to avoid netCDF/HDF5 library clash with VTK/ParaView
+    pip3 install --no-deps cf-units cftime nc-time-axis dask pyugrid stratify scitools-iris
 
     # Select ParaView major.minor version and patch to form "major.minor.patch"
     pv_version=5.8
@@ -32,7 +58,8 @@ From: ubuntu:18.04
     echo "${pv_sha256} ${pv_filename}" | sha256sum --check
 
     # Build ParaView without GUI and X ("headless") - this will provide ParaView Server
-    # and ParaView Python
+    # and ParaView Python. Use same netCDF/HDF5 libraries as Python-netCDF4 to avoid
+    # runtime issues.
     tar -xf ${pv_filename}
     mkdir -p ParaView-v${pv_version}.${pv_patch}/build
     cd ParaView-v${pv_version}.${pv_patch}/build
@@ -54,12 +81,15 @@ From: ubuntu:18.04
     -DPARAVIEW_PLUGIN_ENABLE_SurfaceLIC=ON \
     -DVTK_USE_X=OFF \
     -DVTK_OPENGL_HAS_OSMESA=ON \
-    -DVTK_SMP_IMPLEMENTATION_TYPE=OpenMP \
+    -DVTK_SMP_IMPLEMENTATION_TYPE=tbb \
     -DVTK_MODULE_ENABLE_VTK_GeovisCore=YES \
-    -DVTK_MODULE_ENABLE_VTK_IONetCDF=YES
+    -DVTK_MODULE_ENABLE_VTK_IONetCDF=YES \
+    -DVTK_MODULE_USE_EXTERNAL_VTK_netcdf=ON \
+    -DVTK_MODULE_USE_EXTERNAL_VTK_hdf5=ON
     make -j 4
     make install
     cd ../..
+    rm -r ParaView-v${pv_version}.${pv_patch} ${pv_filename}
 
     # Build netCDFLFRicReader plugin
     git clone https://github.com/tinyendian/lfric_reader.git
@@ -68,3 +98,5 @@ From: ubuntu:18.04
     cmake .. -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
     make -j 4
     make install
+    cd ../../../..
+    rm -rf lfric_reader
