@@ -25,25 +25,27 @@ From: ubuntu:18.04
     apt-get install -y tzdata
     dpkg-reconfigure --frontend noninteractive tzdata
 
-    apt-get install -y xz-utils pkg-config python3-dev python3-numpy python3-matplotlib \
-                       git wget make cmake libmpich-dev libosmesa6-dev libtbb-dev \
-                       libnetcdf-dev libhdf5-dev \
-                       unzip libgeos-dev libproj-dev libudunits2-dev python3-pip python3-setuptools \
-                       cython3 python3-cartopy python3-netcdf4 python3-scipy python3-toolz \
-                       python3-pandas
+    apt-get install -y unzip xz-utils pkg-config git wget make cmake libmpich-dev libosmesa6-dev \
+                       libtbb-dev libnetcdf-dev libhdf5-dev libgeos-dev libproj-dev libudunits2-dev \
+                       python3-dev python3-pip python3-setuptools
+
+    # Provides more recent versions than apt-get
+    pip3 install cython matplotlib numpy pandas scipy
+
+    # Build these from source to make sure that netCDF/HDF5/GEOS system libraries are used
+    pip3 install --no-binary :all: netCDF4 shapely cartopy
 
     # Pyke is required by Iris but not available through package managers
     wget https://sourceforge.net/projects/pyke/files/pyke/1.1.1/pyke3-1.1.1.zip
-    echo "a7d12d66d4c2ec12576a8187d3001384 pyke3-1.1.1.zip" | md5sum --check
-    unzip pyke3-1.1.1.zip
+    echo "b877b390e70a2eacc01d97c3a992fde947276afc2798ca3ac6c6f74c796cb6dc pyke3-1.1.1.zip" | sha256sum --check
+    unzip -q pyke3-1.1.1.zip
     cd pyke-1.1.1
     python3 setup.py install
     cd ..
     rm -r pyke-1.1.1 pyke3-1.1.1.zip
 
-    # These are not available/recent enough on RPMs
-    # Install without dependencies to avoid netCDF/HDF5 library clash with VTK/ParaView
-    pip3 install --no-deps cf-units cftime nc-time-axis dask pyugrid stratify scitools-iris
+    # Install Iris with UGRID support
+    pip3 install pyugrid scitools-iris
 
     # Select ParaView major.minor version and patch to form "major.minor.patch"
     pv_version=5.8
