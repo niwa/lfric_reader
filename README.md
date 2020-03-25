@@ -70,28 +70,33 @@ The server will report its port number (the default is 11111) and wait for a con
 
 ## Singularity Container
 
-The repository includes a Singularity container definition file ```Singularity``` that provides a recent version of ParaView together with the LFRic reader plugin. Note that only a "headless" version of ParaView will currently be built providing ParaView server and ParaView Python. Please refer to the instructions below on how to use the container.
+The repository includes Singularity container definition files ```Singularity-headless``` and ```Singularity-GUI``` that can be used to build containers with a recent version of ParaView and the LFRic reader plugin. The "headless" version does not require an X window context and is intended for running Python scripts or ParaView server only, it also supports MPI parallelisation. The "GUI" version provides the ParaView GUI and comes without MPI support. Both container variants can be used independently, or in combination by connecting the GUI to a possibly MPI-parallelised server instance that could run on the same host or a separate machine.
 
-Build the container first using
+Build the containers first using
 ```
-singularity build lfric_reader.sif Singularity
+singularity build paraview_headless.sif Singularity-headless
+singularity build paraview_gui.sif Singularity-gui
 ```
-Note that this usually requires root privileges. Once container build has finished, you can run a ParaView Python script using
+Note that this usually requires root privileges. The build process can take a few hours as ParaView needs to be built from source. Once it has finished, you can run a ParaView Python script using
 ```
-singularity exec lfric_reader.sif pvpython myscript.py
+singularity exec paraview_headless.sif pvpython myscript.py
 ```
-If you want to use the container with the ParaView GUI, you'll need to download a ParaView executable from paraview.org (make sure that you download the exact same version that is used in the container!) and launch the container using
+If this command returns an MPICH error message ```gethostbyname failed```, try adding flag ```--hostname=localhost``` to the above command. To launch the GUI, use
 ```
-singularity exec lfric_reader.sif pvserver
+singularity exec paraview_gui.sif paraview
 ```
-Lauch the GUI and connect to the server from the GUI by clicking on "Connect" in the toolbar. If the container runs on the same host, create a connection to ```localhost``` with port number ```11111``` and connect to the server. If it runs on a different host, you'll need to create an ssh tunnel first and forward port ```11111``` to localhost, then create a connection to ```localhost``` - `11111`.
+If you want to run the ParaView GUI on, e.g., a local Windows laptop, download the appropriate ParaView executable from paraview.org (make sure that you download the exact same version that is used in the container!) and launch the "headless" container using
+```
+singularity exec paraview_headless.sif pvserver
+```
+Then launch the GUI and connect to the server by clicking on "Connect" in the toolbar. If the "headless" container runs on the same host, create a connection to ```localhost``` with port number ```11111``` and connect to the server, which should respond with a "Client connected" message on the command line. If it runs on a different host, you'll need to create an ssh tunnel first and forward port ```11111``` to localhost, then create a connection to ```localhost``` - `11111`.
 
-It is also possible to run the container with MPI parallelisation. If a single host is sufficient, launch the container using
+It is also possible to run the "headless" container with MPI parallelisation. If a single host is sufficient, launch the container using
 ```
-singularity exec lfric_reader.sif mpiexec -np <number of ranks> pvserver
+singularity exec paraview_headless.sif mpiexec -np <number of ranks> pvserver
 ```
-If more than one host is needed, launch the container with the same MPI distribution that was used to build ParaView inside (currently MPICH - it should be straightforward to switch to, e.g., OpenMPI in the Singularity definition file and rebuild the container),
+If more than one host is needed, launch the container with the same MPI distribution that was used to build ParaView inside the container (currently MPICH - it should be straightforward to switch to, e.g., OpenMPI in the Singularity definition file if needed),
 ```
-mpiexec -np <number of ranks> singularity exec lfric_reader.sif pvserver
+mpiexec -np <number of ranks> singularity exec paraview_headless.sif pvserver
 ```
 This should also work with a job submission system such as Slurm, provided that the underlying MPI distribution matches the one used inside the container.
