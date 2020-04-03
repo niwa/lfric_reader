@@ -21,7 +21,7 @@ From: ubuntu:18.04
     # Avoid environment import as directory is probably unavailable inside container
     unset XDG_RUNTIME_DIR
 
-%post -c /bin/bash
+%post
 
     apt-get update && apt-get upgrade -y
 
