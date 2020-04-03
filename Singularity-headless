@@ -15,6 +15,7 @@ From: ubuntu:18.04
     # Required for auto-loading the netCDFLFRicReader plugin
     export LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/netCDFLFRicReader
     export PV_PLUGIN_PATH=/usr/local/lib/netCDFLFRicReader
+    export PV_NC_PLUGIN_PATH=netCDFLFRicReader.so
 
 %post -c /bin/bash
 

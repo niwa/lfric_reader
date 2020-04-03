@@ -1,10 +1,13 @@
+import os
+
 import paraview.simple as pvs
+
 
 # Load the LFRic reader plugin - it may be necessary to provide the full path to
 # libnetCDFLFRicReader.so, depending on the installation. Set remote=True if you
 # connect ParaView with a separate server.
-pluginPath = ''
-pvs.LoadPlugin(pluginPath+'libnetCDFLFRicReader.so', remote=False)
+pluginPath = os.environ.get('PV_NC_PLUGIN_PATH', 'libnetCDFLFRicReader.so')
+pvs.LoadPlugin(pluginPath, remote=False)
 
 # Create a new data source with the LFRic output data, load the pressure field,
 # and use Cartesian coordinates rather than lon-lat-rad
