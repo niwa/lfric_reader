@@ -16,7 +16,7 @@ From: ubuntu:18.04
     export LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/netCDFLFRicReader
     export PV_PLUGIN_PATH=/usr/local/lib/netCDFLFRicReader
 
-%post -c /bin/bash
+%post
 
     apt-get update && apt-get upgrade -y
 
