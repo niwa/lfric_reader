@@ -94,7 +94,7 @@ From: ubuntu:18.04
     rm -r ParaView-v${pv_version}.${pv_patch} ${pv_filename}
 
     # Build netCDFLFRicReader plugin
-    git clone https://github.com/tinyendian/lfric_reader.git
+    git clone https://github.com/niwa/lfric_reader.git
     mkdir -p lfric_reader/src/cxx/build
     cd lfric_reader/src/cxx/build
     cmake .. -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
