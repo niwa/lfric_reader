@@ -61,19 +61,17 @@ const char* netCDFLFRicFile::GetFileName()
 bool netCDFLFRicFile::HasDim(const std::string& dimName)
 {
   int dimId;
+  bool retval = false;
   const int result = nc_inq_dimid(this->ncId, dimName.c_str(), &dimId);
   if (result == NC_NOERR)
   {
-    return true;
+    retval=true;
   }
-  else if (result == NC_EBADDIM)
-  {
-    return false;
-  }
-  else
+  else if (result != NC_EBADDIM)
   {
     ncErrorMacro(result);
   }
+  return retval;
 }
 
 //----------------------------------------------------------------------------
@@ -218,19 +216,17 @@ std::vector<std::string> netCDFLFRicFile::GetAttTextSplit(const int varId,
 bool netCDFLFRicFile::HasVar(const std::string& varName)
 {
   int varId;
+  bool retval = false;
   const int result = nc_inq_varid(this->ncId, varName.c_str(), &varId);
   if (result == NC_NOERR)
   {
-    return true;
+    retval=true;
   }
-  else if (result == NC_ENOTVAR)
-  {
-    return false;
-  }
-  else
+  else if (result != NC_ENOTVAR)
   {
     ncErrorMacro(result);
   }
+  return retval;
 }
 
 //----------------------------------------------------------------------------
