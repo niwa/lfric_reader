@@ -28,22 +28,37 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
   const double yMin = *std::min_element(nodeCoordsY.begin(), nodeCoordsY.end());
   const double yMax = *std::max_element(nodeCoordsY.begin(), nodeCoordsY.end());
 
-  // These offsets are needed to mirror nodes into the correct location
+  // Grid handling parameters that are set based on simple tests
   double xOffset;
   double yOffset;
+  double cellThreshold;
+  bool mirrorFromWest;
 
   // We expect lon between 0..360 and lat between -90..90 for a cubed-sphere grid
-  if (xMin >= 0.0 and xMax <= 360.0 and yMin >= -90.0 and yMax <= 90.0)
+  if (xMin >= -180.0 and xMax <= 180.0 and yMin >= -90.0 and yMax <= 90.0)
+  {
+    xOffset = 0.0;
+    yOffset = 0.0;
+    cellThreshold = 0.6;
+    mirrorFromWest = false;
+    debugMacro("Detected cubed-sphere grid with -180..180 lon range, setting xOffset=" <<
+               xOffset << " yOffset=" << yOffset << endl);
+  }
+  else if (xMin >= 0.0 and xMax <= 360.0 and yMin >= -90.0 and yMax <= 90.0)
   {
     xOffset = 180.0;
     yOffset = 0.0;
-    debugMacro("Detected cubed-sphere grid, setting xOffset=" <<
+    cellThreshold = 0.5;
+    mirrorFromWest = true;
+    debugMacro("Detected cubed-sphere grid with 0..360 lon range, setting xOffset=" <<
                xOffset << " yOffset=" << yOffset << endl);
   }
   else
   {
     xOffset = 0.5*(xMin + xMax);
     yOffset = 0.5*(yMin + yMax);
+    cellThreshold = 0.5;
+    mirrorFromWest = true;
     debugMacro("Detected grid other than cubed-sphere, setting xOffset=" <<
                xOffset << " yOffset=" << yOffset << endl);
   }
@@ -85,8 +100,8 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
     const double faceDy = yMaxFace - yMinFace;
 
     // Find faces that span across the grid
-    const bool spanX = faceDx > 0.5*gridDx;
-    const bool spanY = faceDy > 0.5*gridDy;
+    const bool spanX = faceDx > cellThreshold*gridDx;
+    const bool spanY = faceDy > cellThreshold*gridDy;
 
     // If face spans across, loop over vertices (nodes) and mirror
     // nodes at the left boundary to resolve grid periodicity
@@ -121,8 +136,9 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
             faceNodeConnectivity[faceBaseIdx + iVertex] = mirrorNodesIt->second;
           }
         }
-        // Mirror nodes on left domain boundary
-        else if (spanX && nodeCoordsOffsetX < 0)
+        // Mirror nodes on left or right domain boundary
+        else if (spanX and ((nodeCoordsOffsetX < 0 and mirrorFromWest) or \
+                            (nodeCoordsOffsetX > 0 and not mirrorFromWest)))
         {
           mirrorNodesIt = mirrorNodesX.find(nodeId);
           if (mirrorNodesIt == mirrorNodesX.end())
@@ -138,7 +154,7 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
           }
         }
         // Mirror nodes on bottom domain boundary
-        else if (spanY && nodeCoordsOffsetY < 0)
+        else if (spanY and nodeCoordsOffsetY < 0)
         {
           mirrorNodesIt = mirrorNodesY.find(nodeId);
           if (mirrorNodesIt == mirrorNodesY.end())

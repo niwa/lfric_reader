@@ -61,19 +61,17 @@ const char* netCDFLFRicFile::GetFileName()
 bool netCDFLFRicFile::HasDim(const std::string& dimName)
 {
   int dimId;
+  bool retval = false;
   const int result = nc_inq_dimid(this->ncId, dimName.c_str(), &dimId);
   if (result == NC_NOERR)
   {
-    return true;
+    retval=true;
   }
-  else if (result == NC_EBADDIM)
-  {
-    return false;
-  }
-  else
+  else if (result != NC_EBADDIM)
   {
     ncErrorMacro(result);
   }
+  return retval;
 }
 
 //----------------------------------------------------------------------------
@@ -218,19 +216,17 @@ std::vector<std::string> netCDFLFRicFile::GetAttTextSplit(const int varId,
 bool netCDFLFRicFile::HasVar(const std::string& varName)
 {
   int varId;
+  bool retval = false;
   const int result = nc_inq_varid(this->ncId, varName.c_str(), &varId);
   if (result == NC_NOERR)
   {
-    return true;
+    retval=true;
   }
-  else if (result == NC_ENOTVAR)
-  {
-    return false;
-  }
-  else
+  else if (result != NC_ENOTVAR)
   {
     ncErrorMacro(result);
   }
+  return retval;
 }
 
 //----------------------------------------------------------------------------
@@ -380,7 +376,8 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
         // Prefer LFRic full-level face mesh which matches VTK grids
         // topology_dimension=2 means faces
-        if (varName == "Mesh2d_full_levels" and
+        if ((varName == "Mesh2d_full_levels" or
+             varName == "Mesh2d_face") and
             this->GetAttInt(varId, "topology_dimension") == 2)
 	{
           mesh2D.meshTopologyVarId = varId;
@@ -390,7 +387,8 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
         }
         // Edge-half-level mesh in LFRic output files currently has
         // topology_dimension=2
-        else if (varName == "Mesh2d_edge_half_levels" and
+        else if ((varName == "Mesh2d_edge_half_levels" or
+                  varName == "Mesh2d_edge") and
                  this->GetAttInt(varId, "topology_dimension") == 2)
         {
           hasHalfLevelEdgeMesh = true;
