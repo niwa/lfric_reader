@@ -376,7 +376,8 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
         // Prefer LFRic full-level face mesh which matches VTK grids
         // topology_dimension=2 means faces
-        if (varName == "Mesh2d_full_levels" and
+        if ((varName == "Mesh2d_full_levels" or
+             varName == "Mesh2d_face") and
             this->GetAttInt(varId, "topology_dimension") == 2)
 	{
           mesh2D.meshTopologyVarId = varId;
@@ -386,7 +387,8 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
         }
         // Edge-half-level mesh in LFRic output files currently has
         // topology_dimension=2
-        else if (varName == "Mesh2d_edge_half_levels" and
+        else if ((varName == "Mesh2d_edge_half_levels" or
+                  varName == "Mesh2d_edge") and
                  this->GetAttInt(varId, "topology_dimension") == 2)
         {
           hasHalfLevelEdgeMesh = true;

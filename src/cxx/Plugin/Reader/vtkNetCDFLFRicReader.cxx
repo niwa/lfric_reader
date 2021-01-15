@@ -163,6 +163,7 @@ int vtkNetCDFLFRicReader::RequestInformation(
   // otherwise accept only fields on the single mesh that is expected to be of half-level type
   if (this->mesh2D.isLFRicXIOSFile)
   {
+    // Original LFRic output file format
     if (inputFile.HasDim("nMesh2d_half_levels_face"))
     {
       const int horizontalDimId = inputFile.GetDimId("nMesh2d_half_levels_face");
@@ -180,6 +181,24 @@ int vtkNetCDFLFRicReader::RequestInformation(
     if (inputFile.HasDim("nMesh2d_edge_half_levels_edge"))
     {
       const int horizontalDimId = inputFile.GetDimId("nMesh2d_edge_half_levels_edge");
+      const int verticalDimId = inputFile.GetDimId("half_levels");
+      inputFile.UpdateFieldMap(this->PointFields, "edge", horizontalDimId,
+                               halfLevelEdgeMesh, verticalDimId, tAxis.axisDimId);
+    }
+    // LFRic output file format with partially consolidated and renamed horizontal domains
+    if (inputFile.HasDim("nMesh2d_face_face"))
+    {
+      const int horizontalDimId = inputFile.GetDimId("nMesh2d_face_face");
+      const int verticalDimIdHalf = inputFile.GetDimId("half_levels");
+      const int verticalDimIdFull = inputFile.GetDimId("full_levels");
+      inputFile.UpdateFieldMap(this->CellFields, "face", horizontalDimId,
+                               halfLevelFaceMesh, verticalDimIdHalf, tAxis.axisDimId);
+      inputFile.UpdateFieldMap(this->CellFields, "face", horizontalDimId,
+                               halfLevelFaceMesh, verticalDimIdFull, tAxis.axisDimId);
+    }
+    if (inputFile.HasDim("nMesh2d_edge_edge"))
+    {
+      const int horizontalDimId = inputFile.GetDimId("nMesh2d_edge_edge");
       const int verticalDimId = inputFile.GetDimId("half_levels");
       inputFile.UpdateFieldMap(this->PointFields, "edge", horizontalDimId,
                                halfLevelEdgeMesh, verticalDimId, tAxis.axisDimId);
