@@ -509,7 +509,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   this->UpdateProgress(0.25);
 
   //
-  // Resolve grid periodicity by mirroring nodes
+  // If projected view is used, check if periodicity and dateline need resolving
   //
 
   // Keep track of node count, in case that nodes are added to resolve
@@ -518,11 +518,11 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   if (!this->UseCartCoords)
   {
-    vtkDebugMacro("Resolving grid periodicity..." << endl);
+    vtkDebugMacro("Preparing grid for projected view..." << endl);
 
-    resolvePeriodicGrid(nodeCoordsX, nodeCoordsY, faceNodes,
-                        this->mesh2D.numFaces, this->mesh2D.numVertsPerFace);
-    // Update node count to allow for added nodes
+    prepareGrid(nodeCoordsX, nodeCoordsY, faceNodes,
+                this->mesh2D.numFaces, this->mesh2D.numVertsPerFace);
+    // Update node count to allow for possibly added nodes
     numNodesCurrent = nodeCoordsX.size();
   }
 
