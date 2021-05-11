@@ -385,7 +385,6 @@ TEST_CASE( "Point Data Fields", "[regression]" )
     // Retrieve dimensions from the first cells
     const vtkIdType edgeLen = static_cast<vtkIdType>(dataArray->GetComponent(0, 0));
     const vtkIdType levelsLen = static_cast<vtkIdType>(dataArray->GetComponent(1, 0));
-    const vtkIdType componentLen = static_cast<vtkIdType>(dataArray->GetComponent(2, 0));
 
     // Check data array size
     REQUIRE( dataArray->GetNumberOfTuples() == edgeLen*levelsLen );

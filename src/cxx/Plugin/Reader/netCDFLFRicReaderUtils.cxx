@@ -138,8 +138,8 @@ int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
 
 //----------------------------------------------------------------------------
 
-void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
-                         std::vector<double> & nodeCoordsY,
+void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
+                         std::vector<double> & nodeCoordsLat,
                          std::vector<long long> & faceNodeConnectivity,
                          const size_t numFaces,
                          const size_t numVertsPerFace,
@@ -151,8 +151,8 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
 {
   debugMacro("Entering resolvePeriodicGrid..." << endl);
 
-  double xOffset;
-  double yOffset;
+  double lonOffset;
+  double latOffset;
   double cellThreshold;
   bool mirrorFromWest;
 
@@ -161,21 +161,21 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
     // Assume cubed-sphere grid with range (newer output files use -180..180 degrees)
     if (lonMin >= -180.0 and lonMax <= 180.0)
     {
-      xOffset = 0.0;
-      yOffset = 0.0;
+      lonOffset = 0.0;
+      latOffset = 0.0;
       cellThreshold = 0.6;
       mirrorFromWest = false;
-      debugMacro("resolvePeriodicGrid: Assuming cubed-sphere grid with -180..180 lon range, setting xOffset=" <<
-                 xOffset << " yOffset=" << yOffset << endl);
+      debugMacro("resolvePeriodicGrid: Assuming cubed-sphere grid with -180..180 lon range, setting lonOffset=" <<
+                 lonOffset << " latOffset=" << latOffset << endl);
     }
     else if (lonMin >= 0.0 and lonMax <= 360.0)
     {
-      xOffset = 180.0;
-      yOffset = 0.0;
+      lonOffset = 180.0;
+      latOffset = 0.0;
       cellThreshold = 0.5;
       mirrorFromWest = true;
-      debugMacro("resolvePeriodicGrid: Assuming cubed-sphere grid with 0..360 lon range, setting xOffset=" <<
-                 xOffset << " yOffset=" << yOffset << endl);
+      debugMacro("resolvePeriodicGrid: Assuming cubed-sphere grid with 0..360 lon range, setting lonOffset=" <<
+                 lonOffset << " latOffset=" << latOffset << endl);
     }
     else
     {
@@ -186,23 +186,23 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
   }
   else
   {
-    xOffset = 0.5*(lonMin + lonMax);
-    yOffset = 0.5*(latMin + latMax);
+    lonOffset = 0.5*(lonMin + lonMax);
+    latOffset = 0.5*(latMin + latMax);
     cellThreshold = 0.5;
     mirrorFromWest = true;
-    debugMacro("Detected LAM grid, setting xOffset=" <<
-               xOffset << " yOffset=" << yOffset << endl);
+    debugMacro("Detected LAM grid, setting lonOffset=" <<
+               lonOffset << " latOffset=" << latOffset << endl);
   }
 
-  // Compute xy grid size
-  const double gridDx = lonMax-lonMin;
-  const double gridDy = latMax-latMin;
+  // Compute lon-lat grid size
+  const double gridDlon = lonMax-lonMin;
+  const double gridDlat = latMax-latMin;
 
   // Need to keep track of nodes that have already been duplicated,
   // to avoid degenerate nodes
-  std::unordered_map<long long, long long> mirrorNodesX;
-  std::unordered_map<long long, long long> mirrorNodesY;
-  std::unordered_map<long long, long long> mirrorNodesXY;
+  std::unordered_map<long long, long long> mirrorNodesLon;
+  std::unordered_map<long long, long long> mirrorNodesLat;
+  std::unordered_map<long long, long long> mirrorNodesLonLat;
   std::unordered_map<long long, long long>::const_iterator mirrorNodesIt;
 
   // Search all faces in 2D grid
@@ -213,52 +213,52 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
 
     // Compute xy face size
     long long nodeId = faceNodeConnectivity[faceBaseIdx];
-    double xMinFace = nodeCoordsX[nodeId];
-    double xMaxFace = xMinFace;
-    double yMinFace = nodeCoordsY[nodeId];
-    double yMaxFace = yMinFace;
+    double lonMinFace = nodeCoordsLon[nodeId];
+    double lonMaxFace = lonMinFace;
+    double latMinFace = nodeCoordsLat[nodeId];
+    double latMaxFace = latMinFace;
     for (size_t iVertex = 1; iVertex < numVertsPerFace; iVertex++)
     {
       nodeId = faceNodeConnectivity[faceBaseIdx + iVertex];
-      const double xVertex = nodeCoordsX[nodeId];
-      const double yVertex = nodeCoordsY[nodeId];
-      if (xVertex < xMinFace) xMinFace = xVertex;
-      if (xVertex > xMaxFace) xMaxFace = xVertex;
-      if (yVertex < yMinFace) yMinFace = yVertex;
-      if (yVertex > yMaxFace) yMaxFace = yVertex;
+      const double lonVertex = nodeCoordsLon[nodeId];
+      const double latVertex = nodeCoordsLat[nodeId];
+      if (lonVertex < lonMinFace) lonMinFace = lonVertex;
+      if (lonVertex > lonMaxFace) lonMaxFace = lonVertex;
+      if (latVertex < latMinFace) latMinFace = latVertex;
+      if (latVertex > latMaxFace) latMaxFace = latVertex;
     }
-    const double faceDx = xMaxFace - xMinFace;
-    const double faceDy = yMaxFace - yMinFace;
+    const double faceDlon = lonMaxFace - lonMinFace;
+    const double faceDlat = latMaxFace - latMinFace;
 
     // Find faces that span across the grid, as well as certain "defective" cells
-    const bool spanX = faceDx > cellThreshold*gridDx;
-    const bool spanY = faceDy > cellThreshold*gridDy;
+    const bool spanLon = faceDlon > cellThreshold*gridDlon;
+    const bool spanLat = faceDlat > cellThreshold*gridDlat;
 
     // If face spans across, loop over vertices (nodes) and mirror
     // nodes at the left boundary to resolve grid periodicity
-    if (spanX or spanY)
+    if (spanLon or spanLat)
     {
       for (size_t iVertex = 0; iVertex < numVertsPerFace; iVertex++)
       {
 	nodeId = faceNodeConnectivity[faceBaseIdx + iVertex];
 
         // Offset node coordinates to compute their mirror locations
-        const double nodeCoordsOffsetX = nodeCoordsX[nodeId] - xOffset;
-        const double nodeCoordsOffsetY = nodeCoordsY[nodeId] - yOffset;
+        const double nodeCoordsOffsetLon = nodeCoordsLon[nodeId] - lonOffset;
+        const double nodeCoordsOffsetLat = nodeCoordsLat[nodeId] - latOffset;
 
         // Mirror corner nodes
-        if (spanX and spanY and nodeCoordsOffsetX < 0 and nodeCoordsOffsetY < 0)
+        if (spanLon and spanLat and nodeCoordsOffsetLon < 0 and nodeCoordsOffsetLat < 0)
         {
           // Keep track of mirrored node to avoid degeneracy; insert a new node if
           // no mirror node has been created yet
-          mirrorNodesIt = mirrorNodesXY.find(nodeId);
-          if (mirrorNodesIt == mirrorNodesXY.end())
+          mirrorNodesIt = mirrorNodesLonLat.find(nodeId);
+          if (mirrorNodesIt == mirrorNodesLonLat.end())
           {
             // Add node and register it in face-node connectivity array
-            nodeCoordsX.push_back(-nodeCoordsOffsetX + xOffset);
-            nodeCoordsY.push_back(-nodeCoordsOffsetY + yOffset);
-            const long long newNodeId = nodeCoordsX.size() - 1;
-            mirrorNodesXY.insert({nodeId, newNodeId});
+            nodeCoordsLon.push_back(-nodeCoordsOffsetLon + lonOffset);
+            nodeCoordsLat.push_back(-nodeCoordsOffsetLat + latOffset);
+            const long long newNodeId = nodeCoordsLon.size() - 1;
+            mirrorNodesLonLat.insert({nodeId, newNodeId});
             faceNodeConnectivity[faceBaseIdx + iVertex] = newNodeId;
           }
           else
@@ -268,16 +268,16 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
           }
         }
         // Mirror nodes on left or right domain boundary
-        else if (spanX and ((nodeCoordsOffsetX < 0 and mirrorFromWest) or \
-                            (nodeCoordsOffsetX > 0 and not mirrorFromWest)))
+        else if (spanLon and ((nodeCoordsOffsetLon < 0 and mirrorFromWest) or \
+                              (nodeCoordsOffsetLon > 0 and not mirrorFromWest)))
         {
-          mirrorNodesIt = mirrorNodesX.find(nodeId);
-          if (mirrorNodesIt == mirrorNodesX.end())
+          mirrorNodesIt = mirrorNodesLon.find(nodeId);
+          if (mirrorNodesIt == mirrorNodesLon.end())
           {
-            nodeCoordsX.push_back(-nodeCoordsOffsetX + xOffset);
-            nodeCoordsY.push_back( nodeCoordsOffsetY + yOffset);
-            const long long newNodeId = nodeCoordsX.size() - 1;
-            mirrorNodesX.insert({nodeId, newNodeId});
+            nodeCoordsLon.push_back(-nodeCoordsOffsetLon + lonOffset);
+            nodeCoordsLat.push_back( nodeCoordsOffsetLat + latOffset);
+            const long long newNodeId = nodeCoordsLon.size() - 1;
+            mirrorNodesLon.insert({nodeId, newNodeId});
             faceNodeConnectivity[faceBaseIdx + iVertex] = newNodeId;
           }
           else
@@ -286,15 +286,15 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
           }
         }
         // Mirror nodes on bottom domain boundary
-        else if (spanY and nodeCoordsOffsetY < 0)
+        else if (spanLat and nodeCoordsOffsetLat < 0)
         {
-          mirrorNodesIt = mirrorNodesY.find(nodeId);
-          if (mirrorNodesIt == mirrorNodesY.end())
+          mirrorNodesIt = mirrorNodesLat.find(nodeId);
+          if (mirrorNodesIt == mirrorNodesLat.end())
           {
-            nodeCoordsX.push_back( nodeCoordsOffsetX + xOffset);
-            nodeCoordsY.push_back(-nodeCoordsOffsetY + yOffset);
-            const long long newNodeId = nodeCoordsX.size() - 1;
-            mirrorNodesY.insert({nodeId, newNodeId});
+            nodeCoordsLon.push_back( nodeCoordsOffsetLon + lonOffset);
+            nodeCoordsLat.push_back(-nodeCoordsOffsetLat + latOffset);
+            const long long newNodeId = nodeCoordsLon.size() - 1;
+            mirrorNodesLat.insert({nodeId, newNodeId});
             faceNodeConnectivity[faceBaseIdx + iVertex] = newNodeId;
           }
           else
@@ -306,9 +306,9 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
     }
   }
 
-  debugMacro("resolvePeriodicGrid: mirrorNodesX: " << mirrorNodesX.size() << endl);
-  debugMacro("resolvePeriodicGrid: mirrorNodesY: " << mirrorNodesY.size() << endl);
-  debugMacro("resolvePeriodicGrid: mirrorNodesXY: " << mirrorNodesXY.size() << endl);
+  debugMacro("resolvePeriodicGrid: mirrorNodesLon: " << mirrorNodesLon.size() << endl);
+  debugMacro("resolvePeriodicGrid: mirrorNodesLat: " << mirrorNodesLat.size() << endl);
+  debugMacro("resolvePeriodicGrid: mirrorNodesLonLat: " << mirrorNodesLonLat.size() << endl);
 
   debugMacro("Finished resolvePeriodicGrid" << endl);
 }

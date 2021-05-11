@@ -92,7 +92,6 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
   SECTION( "GetVarDimId With Invalid Dim Works" )
   {
     const int varId = ncFile.GetVarId("var1");
-    REQUIRE( ncFile.GetVarDimId(varId, -7) == -1 );
     REQUIRE( ncFile.GetVarDimId(varId, 10) == -1 );
   }
 

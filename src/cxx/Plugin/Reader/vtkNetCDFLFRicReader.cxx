@@ -274,7 +274,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   size_t timestep = 0;
   if (outInfo->Has(vtkStreamingDemandDrivenPipeline::UPDATE_TIME_STEP()))
   {
-    double requested_time = outInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_TIME_STEP());
+    const double requested_time = outInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_TIME_STEP());
     for (timestep = 0; timestep < this->TimeSteps.size(); timestep++)
     {
       if (this->TimeSteps[timestep] >= requested_time) break;
@@ -288,17 +288,17 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   }
 
   // Find out required partition and ghost levels
-  int piece = outInfo->Get(
+  const int piece = outInfo->Get(
       vtkStreamingDemandDrivenPipeline::UPDATE_PIECE_NUMBER());
-  int numPieces = outInfo->Get(
+  const int numPieces = outInfo->Get(
       vtkStreamingDemandDrivenPipeline::UPDATE_NUMBER_OF_PIECES());
-  int numGhosts = outInfo->Get(
+  const int numGhosts = outInfo->Get(
       vtkStreamingDemandDrivenPipeline::UPDATE_NUMBER_OF_GHOST_LEVELS());
 
   vtkDebugMacro("piece=" << piece << " numPieces=" << numPieces <<
                 " numGhosts=" << numGhosts << endl);
 
-  if (numPieces > this->zAxis.axisLength)
+  if (static_cast<size_t>(numPieces) > this->zAxis.axisLength)
   {
     vtkErrorMacro("Pipeline requested " << numPieces <<
                   " pieces but reader can only provide " <<

@@ -7,6 +7,7 @@
 
 #define ncErrorMacro(e) if (e != NC_NOERR) {std::cerr << "NetCDF Error: " << nc_strerror(e) << "\n";}
 
+#define errorMacro(x) std::cerr << x
 #ifdef DEBUG
 #define debugMacro(x) std::cerr << x
 #else
@@ -140,9 +141,16 @@ size_t netCDFLFRicFile::GetVarNumDims(const int varId)
 {
   int numDims;
   ncErrorMacro(nc_inq_varndims(this->ncId, varId, &numDims));
-
-  // We rely on netCDF and assume that numDims >= 0
-  return static_cast<size_t>(numDims);
+  if (numDims < 0)
+  {
+    errorMacro("netCDFLFRicFile::GetVarNumDims: NetCDF returned invalid " <<
+               "number of dimensions: " << numDims);
+    return 0;
+  }
+  else
+  {
+    return static_cast<size_t>(numDims);
+  }
 }
 
 //----------------------------------------------------------------------------
@@ -154,7 +162,7 @@ int netCDFLFRicFile::GetVarDimId(const int varId,
 
   // Return undefined ID if out of range
   int dimId = -1;
-  if (dim >= 0 and dim < numDims)
+  if (dim < numDims)
   {
     std::vector<int> dimIds;
     dimIds.resize(numDims);
@@ -256,7 +264,16 @@ size_t netCDFLFRicFile::GetNumVars()
 {
   int numVars;
   ncErrorMacro(nc_inq_nvars(this->ncId, &numVars));
-  return numVars;
+  if (numVars < 0)
+  {
+    errorMacro("netCDFLFRicFile::GetNumVars: NetCDF returned invalid " <<
+               "number of variables: " << numVars);
+    return 0;
+  }
+  else
+  {
+    return static_cast<size_t>(numVars);
+  }
 }
 
 //----------------------------------------------------------------------------
@@ -267,7 +284,7 @@ void netCDFLFRicFile::LoadVarDouble(const int varId,
                                     double* buffer)
 {
   // Check if number of dimensions matches netCDF variable
-  const int numDims = this->GetVarNumDims(varId);
+  const size_t numDims = this->GetVarNumDims(varId);
   if (numDims != start.size() or numDims != count.size())
   {
     std::cerr << "netCDFLFRicFile::LoadVarDouble: number of dimensions does not match netCDF variable.\n";
@@ -300,7 +317,7 @@ std::vector<double> netCDFLFRicFile::GetVarDouble(
   varData.resize(size);
 
   // Check if number of dimensions matches netCDF variable
-  const int numDims = this->GetVarNumDims(varId);
+  const size_t numDims = this->GetVarNumDims(varId);
   if (numDims != start.size() or numDims != count.size())
   {
     std::cerr << "netCDFLFRicFile::GetVarDouble: number of dimensions does not match netCDF variable.\n";
@@ -334,7 +351,7 @@ std::vector<long long> netCDFLFRicFile::GetVarLongLong(
   varData.resize(size);
 
   // Check if number of dimensions matches netCDF variable
-  const int numDims = this->GetVarNumDims(varId);
+  const size_t numDims = this->GetVarNumDims(varId);
   if (numDims != start.size() or numDims != count.size())
   {
     std::cerr << "netCDFLFRicFile::GetVarLongLong: number of dimensions does not match netCDF variable.\n";
@@ -364,7 +381,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   // Look for UGRID 2D mesh description dummy variable,
   // must have attribute cf_role=mesh_topology
   // There can be several mesh descriptions in a file
-  for (int varId = 0; varId < this->GetNumVars(); varId++)
+  for (int varId = 0; varId < static_cast<int>(this->GetNumVars()); varId++)
   {
     const std::string varName = this->GetVarName(varId);
 
@@ -584,7 +601,7 @@ CFAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
   // Restrict choices to "level_height" and "model_level_number"
   else
   {
-    for (int varId = 0; varId < this->GetNumVars(); varId++)
+    for (int varId = 0; varId < static_cast<int>(this->GetNumVars()); varId++)
     {
       if (this->VarHasAtt(varId, "positive"))
       {
@@ -618,7 +635,7 @@ CFAxis netCDFLFRicFile::GetTAxisDescription()
 
   // Look for variable with standard_name = time, even though this is not
   // strictly required by CF conventions
-  for (int varId = 0; varId < this->GetNumVars(); varId++)
+  for (int varId = 0; varId < static_cast<int>(this->GetNumVars()); varId++)
   {
     if (this->VarHasAtt(varId, "standard_name"))
     {
@@ -645,7 +662,7 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
 {
   debugMacro("Entering netCDFLFRicFile::UpdateFieldMap...\n");
 
-  for (int varId = 0; varId < this->GetNumVars(); varId++)
+  for (int varId = 0; varId < static_cast<int>(this->GetNumVars()); varId++)
   {
     debugMacro("Considering variable " << this->GetVarName(varId) << "\n");
 
