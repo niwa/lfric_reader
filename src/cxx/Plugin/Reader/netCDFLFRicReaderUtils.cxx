@@ -70,6 +70,11 @@ void resolveLongitudeGap(std::vector<double> & nodeCoordsLon, const double lonMi
     debugMacro("resolveLongitudeGap: Shifted longitudes below " << lonShiftThreshold <<
                " by 360 degrees eastward" << endl);
   }
+  else
+  {
+    debugMacro("resolveLongitudeGap: Gap is below threshold " << lonGapSizeThreshold <<
+               ", assuming that the mesh is not fractured" << endl);
+  }
 }
 
 // Computing total solid angle covered by the mesh, excluding wrap-around cells
@@ -240,7 +245,7 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
     {
       for (size_t iVertex = 0; iVertex < numVertsPerFace; iVertex++)
       {
-	nodeId = faceNodeConnectivity[faceBaseIdx + iVertex];
+        nodeId = faceNodeConnectivity[faceBaseIdx + iVertex];
 
         // Offset node coordinates to compute their mirror locations
         const double nodeCoordsOffsetLon = nodeCoordsLon[nodeId] - lonOffset;

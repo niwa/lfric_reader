@@ -172,7 +172,8 @@ public:
                       const std::string & fieldLoc,
                       const int horizontalDimId,
                       const mesh2DTypes & horizontalMeshType,
-                      const int verticalDimId,
+                      const int verticalDimId_1,
+                      const int verticalDimId_2,
                       const int timeDimId);
 
 private:

@@ -281,7 +281,7 @@ TEST_CASE( "Field Tests", "[metadata]" )
   {
     std::map<std::string, DataField> fields;
     ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_full_levels_face"),
-                          fullLevelFaceMesh, ncFile.GetDimId("full_levels"), -1);
+                          fullLevelFaceMesh, ncFile.GetDimId("full_levels"), -1, -1);
     REQUIRE( fields.size() == 1 );
 
     // var3 has horizontal and vertical dimensions
@@ -306,7 +306,7 @@ TEST_CASE( "Field Tests", "[metadata]" )
   {
     std::map<std::string, DataField> fields;
     ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_half_levels_face"),
-                          halfLevelFaceMesh, ncFile.GetDimId("half_levels"), -1);
+                          halfLevelFaceMesh, ncFile.GetDimId("half_levels"), -1, -1);
     REQUIRE( fields.size() == 2 );
 
     // var1 has horizontal and vertical dimensions
@@ -326,7 +326,7 @@ TEST_CASE( "Field Tests", "[metadata]" )
     REQUIRE( field.dims[1].dimLength == 54 );
     REQUIRE( field.dims[1].dimStride == 1 );
 
-    // var1 has horizontal and component dimensions
+    // var2 has horizontal and component dimensions
     REQUIRE( fields.count("var2") == 1 );
     field = fields["var2"];
     REQUIRE( field.active == false );
@@ -344,18 +344,37 @@ TEST_CASE( "Field Tests", "[metadata]" )
     REQUIRE( field.dims[1].dimStride == 1 );
   }
 
+  SECTION( "UpdateFieldMap Returns Correct Number Of Fields For Alternative Vertical Axes" )
+  {
+    std::map<std::string, DataField> fields;
+    ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_full_levels_face"),
+                          halfLevelFaceMesh, ncFile.GetDimId("full_levels"), -1, -1);
+    REQUIRE( fields.size() == 1 );
+
+    fields.clear();
+    ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_full_levels_face"),
+                          halfLevelFaceMesh, -1, ncFile.GetDimId("full_levels"), -1);
+    REQUIRE( fields.size() == 1 );
+
+    fields.clear();
+    ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_full_levels_face"),
+                          halfLevelFaceMesh, ncFile.GetDimId("full_levels"),
+                          ncFile.GetDimId("full_levels"), -1);
+    REQUIRE( fields.size() == 1 );
+  }
+
   SECTION( "UpdateFieldMap Returns No Result For Undefined Location" )
   {
     std::map<std::string, DataField> fields;
     ncFile.UpdateFieldMap(fields, "nowhere", ncFile.GetDimId("nMesh2d_half_levels_face"),
-                          halfLevelFaceMesh, ncFile.GetDimId("half_levels"), -1);
+                          halfLevelFaceMesh, ncFile.GetDimId("half_levels"), -1, -1);
     REQUIRE( fields.size() == 0 );
   }
 
   SECTION( "UpdateFieldMap Returns No Result For Two Unidentified Dimensions" )
   {
     std::map<std::string, DataField> fields;
-    ncFile.UpdateFieldMap(fields, "nowhere", -1, halfLevelFaceMesh, -1, -1);
+    ncFile.UpdateFieldMap(fields, "nowhere", -1, halfLevelFaceMesh, -1, -1, -1);
     REQUIRE( fields.size() == 0 );
   }
 

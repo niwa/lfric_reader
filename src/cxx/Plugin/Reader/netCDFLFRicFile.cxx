@@ -657,7 +657,8 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
                                      const std::string & fieldLoc,
                                      const int horizontalDimId,
                                      const mesh2DTypes & horizontalMeshType,
-                                     const int verticalDimId,
+                                     const int verticalDimId_1,
+                                     const int verticalDimId_2,
                                      const int timeDimId)
 {
   debugMacro("Entering netCDFLFRicFile::UpdateFieldMap...\n");
@@ -726,7 +727,8 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
           debugMacro("Found horizontal dim with length " << fieldSpec.dims[iDim].dimLength <<
                      " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
         }
-        else if (thisDimId == verticalDimId)
+        // Up to two vertical dimensions are possible
+        else if (thisDimId == verticalDimId_1 or thisDimId == verticalDimId_2)
         {
           fieldSpec.hasVerticalDim = true;
           fieldSpec.dims[iDim].dimType = verticalAxisDim;
