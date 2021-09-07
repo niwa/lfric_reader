@@ -12,7 +12,7 @@ TEST_CASE( "UnstructuredGrid Properties - Full Grid", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_single_mesh_valid.nc");
   reader->Update();
   vtkUnstructuredGrid * grid = reader->GetOutput();
 
@@ -124,7 +124,7 @@ TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_multiple_mesh_valid.nc");
   reader->SetOutputMode(1);
   reader->Update();
   vtkUnstructuredGrid * grid = reader->GetOutput();
@@ -236,7 +236,7 @@ TEST_CASE( "Cell Data Fields", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_single_mesh_valid.nc");
   reader->Update();
   reader->SetCellArrayStatus("var1",1);
   reader->SetCellArrayStatus("var2",1);
@@ -351,7 +351,7 @@ TEST_CASE( "Point Data Fields", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_multiple_mesh_valid.nc");
   reader->SetOutputMode(1);
   reader->Update();
   reader->SetPointArrayStatus("var4",1);
@@ -408,7 +408,7 @@ TEST_CASE( "Grid Partitioning", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_single_mesh_valid.nc");
   reader->SetUseIndexAsVertCoord(1);
   reader->Update();
 

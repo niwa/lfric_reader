@@ -39,31 +39,37 @@ struct UGRIDMeshDescription
   size_t numEdges;
   size_t numFaces;
   size_t numVertsPerFace;
+  size_t numEdgesPerFace;
 
   // NetCDF dimension IDs
   int nodeDimId;
   int edgeDimId;
   int faceDimId;
-  int vertDimId;
+  int vertsPerFaceDimId;
+  int edgesPerFaceDimId;
 
   // NetCDF variable IDs
   int meshTopologyVarId;
   int nodeCoordXVarId;
   int nodeCoordYVarId;
   int faceNodeConnVarId;
+  int faceEdgeConnVarId;
   int edgeCoordXVarId;
   int edgeCoordYVarId;
 
-  // Start index for face-node connectivity
+  // Start indices for face-node and edge-node connectivity
   long long faceNodeStartIdx;
+  long long faceEdgeStartIdx;
 
   UGRIDMeshDescription() : isLFRicXIOSFile(false), numTopologies(0),
-    meshType(unknownMesh), numNodes(0), numEdges(0), numFaces(0), numVertsPerFace(0),
+    meshType(unknownMesh), numNodes(0), numEdges(0), numFaces(0),
+    numVertsPerFace(0), numEdgesPerFace(0),
     // Initialise netCDF IDs to -1 - valid IDs are always >= 0
-    nodeDimId(-1), edgeDimId(-1), faceDimId(-1), vertDimId(-1),
+    nodeDimId(-1), edgeDimId(-1), faceDimId(-1),
+    vertsPerFaceDimId(-1), edgesPerFaceDimId(-1),
     meshTopologyVarId(-1), nodeCoordXVarId(-1), nodeCoordYVarId(-1),
-    faceNodeConnVarId(-1), edgeCoordXVarId(-1), edgeCoordYVarId(-1),
-    faceNodeStartIdx(0) {}
+    edgeCoordXVarId(-1), edgeCoordYVarId(-1), faceNodeConnVarId(-1), 
+    faceNodeStartIdx(0), faceEdgeConnVarId(-1), faceEdgeStartIdx(0) {}
 };
 
 // Holds metadata for vertical and time axes
@@ -175,6 +181,12 @@ public:
                       const int verticalDimId_1,
                       const int verticalDimId_2,
                       const int timeDimId);
+
+  void UpdateDataFields(const UGRIDMeshDescription & mesh2D,
+                        const CFAxis & zAxis,
+                        const CFAxis & tAxis,
+                        std::map<std::string, DataField> & CellFields,
+                        std::map<std::string, DataField> & PointFields);
 
 private:
 
