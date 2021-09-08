@@ -110,7 +110,7 @@ private:
   std::vector<double> TimeSteps;
 
   UGRIDMeshDescription mesh2D;
-  CFAxis zAxis;
+  std::map<std::string, CFAxis> zAxes;
   CFAxis tAxis;
 
 };

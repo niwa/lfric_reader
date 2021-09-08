@@ -603,37 +603,46 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
 //----------------------------------------------------------------------------
 
-CFAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
-                                            const mesh2DTypes meshType)
+std::map<std::string, CFAxis> netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
+                                                                   const mesh2DTypes meshType)
 {
-  CFAxis levels = CFAxis();
+  std::map<std::string, CFAxis> verticalAxes;
 
   // Workaround for LFRic XIOS output files where vertical axes do not have
   // attributes required by CF convention
-  if (isLFRicXIOSFile)
+  if (isLFRicXIOSFile and (meshType == fullLevelFaceMesh or meshType == halfLevelFaceMesh))
   {
-    if (meshType == fullLevelFaceMesh and this->HasVar("full_levels"))
+    if (this->HasVar("full_levels"))
     {
+      CFAxis levels = CFAxis();
       levels.axisVarId = this->GetVarId("full_levels");
       levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
-      // Need the number of cells, "full_levels" are interfaces between cells
+      // Need the number of cells here, "full_levels" are interfaces between cells
       levels.axisLength = this->GetDimLen(levels.axisDimId) - 1;
+      verticalAxes.insert(std::pair<std::string, CFAxis>("full_levels",levels));
+      if (meshType == fullLevelFaceMesh)
+      {
+        verticalAxes.insert(std::pair<std::string, CFAxis>("primary",levels));
+      }
     }
-    else if (meshType == halfLevelFaceMesh and this->HasVar("half_levels"))
+    if (this->HasVar("half_levels"))
     {
+      CFAxis levels = CFAxis();
       levels.axisVarId = this->GetVarId("half_levels");
       levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
       levels.axisLength = this->GetDimLen(levels.axisDimId);
-    }
-    else
-    {
-      std::cerr << "GetZAxisDescription: LFRic output file with inconsistent vertical axis.\n";
+      verticalAxes.insert(std::pair<std::string, CFAxis>("half_levels",levels));
+      if (meshType == halfLevelFaceMesh)
+      {
+        verticalAxes.insert(std::pair<std::string, CFAxis>("primary",levels));
+      }
     }
   }
   // Assume that other input files are CF-compliant and use "positive" attribute
   // Restrict choices to "level_height" and "model_level_number"
   else
   {
+    CFAxis levels = CFAxis();
     for (int varId = 0; varId < static_cast<int>(this->GetNumVars()); varId++)
     {
       if (this->VarHasAtt(varId, "positive"))
@@ -646,18 +655,23 @@ CFAxis netCDFLFRicFile::GetZAxisDescription(const bool isLFRicXIOSFile,
           levels.axisVarId = varId;
           levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
           levels.axisLength = this->GetDimLen(levels.axisDimId);
+          // Treat as "half-levels" axis by default
+          verticalAxes.insert(std::pair<std::string, CFAxis>("half_levels",levels));
+          verticalAxes.insert(std::pair<std::string, CFAxis>("primary",levels));
         }
       }
     }
   }
 
   // Assume 2D-only file and set vertical axis to single level if no axis found
-  if (levels.axisVarId < 0)
+  if (verticalAxes.count("primary") == 0)
   {
+    CFAxis levels = CFAxis();
     levels.axisLength = 1;
+    verticalAxes.insert(std::pair<std::string, CFAxis>("primary",levels));
   }
 
-  return levels;
+  return verticalAxes;
 }
 
 //----------------------------------------------------------------------------
@@ -686,6 +700,8 @@ CFAxis netCDFLFRicFile::GetTAxisDescription()
 
 //----------------------------------------------------------------------------
 
+// Discovers data fields in netCDF file using CF attributes and adds them to a
+// map if all variable dimensions can be identified
 void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
                                      const std::string & fieldLoc,
                                      const int horizontalDimId,
@@ -700,7 +716,7 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
   {
     debugMacro("Considering variable " << this->GetVarName(varId) << "\n");
 
-    // Require these netCDF attributes to distinguish fields from UGRID
+    // Require these CF-netCDF attributes to distinguish fields from UGRID
     // variables and other data
     bool valid = (this->VarHasAtt(varId, "standard_name") or
                   this->VarHasAtt(varId, "long_name")) and

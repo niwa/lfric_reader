@@ -153,15 +153,16 @@ int vtkNetCDFLFRicReader::RequestInformation(
   vtkDebugMacro("LFRic XIOS file: " << (this->mesh2D.isLFRicXIOSFile ? "yes" : "no") << endl);
 
   // Look for vertical axis - may be absent
-  this->zAxis = inputFile.GetZAxisDescription(this->mesh2D.isLFRicXIOSFile,
+  this->zAxes = inputFile.GetZAxisDescription(this->mesh2D.isLFRicXIOSFile,
                                               this->mesh2D.meshType);
-  vtkDebugMacro("Vertical axis:" << inputFile.GetVarName(zAxis.axisVarId) << endl);
+  vtkDebugMacro("Primary vertical axis:" << inputFile.GetVarName(this->zAxes.at("primary").axisVarId) << endl);
 
   // Look for time axis - may be absent
   this->tAxis = inputFile.GetTAxisDescription();
-  vtkDebugMacro("Time axis:" << inputFile.GetVarName(tAxis.axisVarId) << endl);
+  vtkDebugMacro("Time axis:" << inputFile.GetVarName(this->tAxis.axisVarId) << endl);
 
-  inputFile.UpdateDataFields(this->mesh2D, this->zAxis, this->tAxis, this->CellFields, this->PointFields);
+  // Update VTK cell and point data fields with netCDF variables
+  inputFile.UpdateDataFields(this->mesh2D, this->zAxes.at("primary"), this->tAxis, this->CellFields, this->PointFields);
   vtkDebugMacro("Number of cell fields found: " << this->CellFields.size() << endl);
   vtkDebugMacro("Number of point fields found: " << this->PointFields.size() << endl);
 
@@ -251,11 +252,11 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   vtkDebugMacro("piece=" << piece << " numPieces=" << numPieces <<
                 " numGhosts=" << numGhosts << endl);
 
-  if (static_cast<size_t>(numPieces) > this->zAxis.axisLength)
+  if (static_cast<size_t>(numPieces) > this->zAxes.at("primary").axisLength)
   {
     vtkErrorMacro("Pipeline requested " << numPieces <<
                   " pieces but reader can only provide " <<
-                  this->zAxis.axisLength << endl);
+                  this->zAxes.at("primary").axisLength << endl);
     return 0;
   }
 
@@ -263,8 +264,8 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // is a non-zero remainder, add one layer to first few pieces
   // Use int here to handle potentially negative results when
   // ghost layers are added.
-  int numLevels = this->zAxis.axisLength/numPieces;
-  int remainder = this->zAxis.axisLength%numPieces;
+  int numLevels = this->zAxes.at("primary").axisLength/numPieces;
+  int remainder = this->zAxes.at("primary").axisLength%numPieces;
   int startLevel = numLevels*piece + remainder;
   if (piece < remainder)
   {
@@ -277,7 +278,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // We need to mark ghost cells in VTK grid, so keep track of
   // ghost levels
   int numGhostsBelow = std::min(numGhosts, startLevel);
-  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->zAxis.axisLength)-
+  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->zAxes.at("primary").axisLength)-
                                 (startLevel+numLevels));
   startLevel -= numGhostsBelow;
   numLevels += numGhostsBelow + numGhostsAbove;
@@ -288,7 +289,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
 
   // Sanity checks
   size_t stopLevel = static_cast<size_t>(startLevel+numLevels);
-  if ((startLevel < 0) || (stopLevel > this->zAxis.axisLength))
+  if ((startLevel < 0) || (stopLevel > this->zAxes.at("primary").axisLength))
   {
     vtkErrorMacro("Erroneous level range encountered: " << startLevel <<
                   "..." << (stopLevel-1) << endl);
@@ -412,7 +413,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   std::vector<double> levels;
   // Treat 2D case as a single 3D layer
-  if (this->UseIndexAsVertCoord or this->zAxis.axisLength == 1)
+  if (this->UseIndexAsVertCoord or this->zAxes.at("primary").axisLength == 1)
   {
     // Use level indices
     levels.resize(numLevels+1);
@@ -424,20 +425,20 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   else if (this->mesh2D.meshType == fullLevelFaceMesh)
   {
     // Load vertex heights from file
-    levels = inputFile.GetVarDouble(this->zAxis.axisVarId,
+    levels = inputFile.GetVarDouble(this->zAxes.at("full_levels").axisVarId,
                                     {startLevel}, {numLevels+1});
   }
   else if (this->mesh2D.meshType == halfLevelFaceMesh)
   {
-    std::vector<double> halfLevels = inputFile.GetVarDouble(this->zAxis.axisVarId,
-                                     {0}, {this->zAxis.axisLength});
+    std::vector<double> halfLevels = inputFile.GetVarDouble(this->zAxes.at("half_levels").axisVarId,
+                                               {0}, {this->zAxes.at("half_levels").axisLength});
 
     // Extrapolate half-level heights at both ends
     const double firstLevel = 2.0*halfLevels[0]-halfLevels[1];
     halfLevels.insert(halfLevels.begin(),firstLevel);
 
-    const double lastLevel = 2.0*halfLevels[this->zAxis.axisLength-1] -
-                                 halfLevels[this->zAxis.axisLength-2];
+    const double lastLevel = 2.0*halfLevels[this->zAxes.at("half_levels").axisLength-1] -
+                                 halfLevels[this->zAxes.at("half_levels").axisLength-2];
     halfLevels.push_back(lastLevel);
 
     // Vertices are in the middle between half-level heights
@@ -591,7 +592,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   //
 
   std::vector<double> levels;
-  if (this->UseIndexAsVertCoord or this->zAxis.axisLength == 1)
+  if (this->UseIndexAsVertCoord or this->zAxes.at("primary").axisLength == 1)
   {
     levels.resize(numLevels);
     for (size_t idx = 0; idx < numLevels; idx++)
@@ -603,7 +604,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   }
   else if (this->mesh2D.meshType == fullLevelFaceMesh)
   {
-    levels = inputFile.GetVarDouble(this->zAxis.axisVarId,
+    levels = inputFile.GetVarDouble(this->zAxes.at("full_levels").axisVarId,
                                     {startLevel}, {numLevels+1});
 
     // Compute half-level heights for points visualisation,

@@ -169,8 +169,8 @@ public:
 
   UGRIDMeshDescription GetMesh2DDescription();
 
-  CFAxis GetZAxisDescription(const bool isLFRicXIOSFile,
-                             const mesh2DTypes meshType);
+  std::map<std::string, CFAxis> GetZAxisDescription(const bool isLFRicXIOSFile,
+                                                    const mesh2DTypes meshType);
 
   CFAxis GetTAxisDescription();
 
