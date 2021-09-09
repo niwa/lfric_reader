@@ -174,19 +174,11 @@ public:
 
   CFAxis GetTAxisDescription();
 
-  void UpdateFieldMap(std::map<std::string, DataField> & fields,
-                      const std::string & fieldLoc,
-                      const int horizontalDimId,
-                      const mesh2DTypes & horizontalMeshType,
-                      const int verticalDimId_1,
-                      const int verticalDimId_2,
-                      const int timeDimId);
-
-  void UpdateDataFields(const UGRIDMeshDescription & mesh2D,
-                        const CFAxis & zAxis,
-                        const CFAxis & tAxis,
-                        std::map<std::string, DataField> & CellFields,
-                        std::map<std::string, DataField> & PointFields);
+  void UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
+                       const std::map<std::string, CFAxis> & zAxes,
+                       const CFAxis & tAxis,
+                       std::map<std::string, DataField> & CellFields,
+                       std::map<std::string, DataField> & PointFields);
 
 private:
 

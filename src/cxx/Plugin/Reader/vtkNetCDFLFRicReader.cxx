@@ -155,14 +155,14 @@ int vtkNetCDFLFRicReader::RequestInformation(
   // Look for vertical axis - may be absent
   this->zAxes = inputFile.GetZAxisDescription(this->mesh2D.isLFRicXIOSFile,
                                               this->mesh2D.meshType);
-  vtkDebugMacro("Primary vertical axis:" << inputFile.GetVarName(this->zAxes.at("primary").axisVarId) << endl);
+  vtkDebugMacro("VTK vertical axis:" << inputFile.GetVarName(this->zAxes.at("vtk").axisVarId) << endl);
 
   // Look for time axis - may be absent
   this->tAxis = inputFile.GetTAxisDescription();
   vtkDebugMacro("Time axis:" << inputFile.GetVarName(this->tAxis.axisVarId) << endl);
 
   // Update VTK cell and point data fields with netCDF variables
-  inputFile.UpdateDataFields(this->mesh2D, this->zAxes.at("primary"), this->tAxis, this->CellFields, this->PointFields);
+  inputFile.UpdateFieldMaps(this->mesh2D, this->zAxes, this->tAxis, this->CellFields, this->PointFields);
   vtkDebugMacro("Number of cell fields found: " << this->CellFields.size() << endl);
   vtkDebugMacro("Number of point fields found: " << this->PointFields.size() << endl);
 
@@ -252,11 +252,11 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   vtkDebugMacro("piece=" << piece << " numPieces=" << numPieces <<
                 " numGhosts=" << numGhosts << endl);
 
-  if (static_cast<size_t>(numPieces) > this->zAxes.at("primary").axisLength)
+  if (static_cast<size_t>(numPieces) > this->zAxes.at("vtk").axisLength)
   {
     vtkErrorMacro("Pipeline requested " << numPieces <<
                   " pieces but reader can only provide " <<
-                  this->zAxes.at("primary").axisLength << endl);
+                  this->zAxes.at("vtk").axisLength << endl);
     return 0;
   }
 
@@ -264,8 +264,8 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // is a non-zero remainder, add one layer to first few pieces
   // Use int here to handle potentially negative results when
   // ghost layers are added.
-  int numLevels = this->zAxes.at("primary").axisLength/numPieces;
-  int remainder = this->zAxes.at("primary").axisLength%numPieces;
+  int numLevels = this->zAxes.at("vtk").axisLength/numPieces;
+  int remainder = this->zAxes.at("vtk").axisLength%numPieces;
   int startLevel = numLevels*piece + remainder;
   if (piece < remainder)
   {
@@ -278,7 +278,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
   // We need to mark ghost cells in VTK grid, so keep track of
   // ghost levels
   int numGhostsBelow = std::min(numGhosts, startLevel);
-  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->zAxes.at("primary").axisLength)-
+  int numGhostsAbove = std::min(numGhosts, static_cast<int>(this->zAxes.at("vtk").axisLength)-
                                 (startLevel+numLevels));
   startLevel -= numGhostsBelow;
   numLevels += numGhostsBelow + numGhostsAbove;
@@ -289,7 +289,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
 
   // Sanity checks
   size_t stopLevel = static_cast<size_t>(startLevel+numLevels);
-  if ((startLevel < 0) || (stopLevel > this->zAxes.at("primary").axisLength))
+  if ((startLevel < 0) || (stopLevel > this->zAxes.at("vtk").axisLength))
   {
     vtkErrorMacro("Erroneous level range encountered: " << startLevel <<
                   "..." << (stopLevel-1) << endl);
@@ -413,7 +413,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
 
   std::vector<double> levels;
   // Treat 2D case as a single 3D layer
-  if (this->UseIndexAsVertCoord or this->zAxes.at("primary").axisLength == 1)
+  if (this->UseIndexAsVertCoord or this->zAxes.at("vtk").axisLength == 1)
   {
     // Use level indices
     levels.resize(numLevels+1);
@@ -592,7 +592,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   //
 
   std::vector<double> levels;
-  if (this->UseIndexAsVertCoord or this->zAxes.at("primary").axisLength == 1)
+  if (this->UseIndexAsVertCoord or this->zAxes.at("vtk").axisLength == 1)
   {
     levels.resize(numLevels);
     for (size_t idx = 0; idx < numLevels; idx++)

@@ -227,19 +227,19 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
 
     // Map needs to contain these three entries
     REQUIRE( result.size() == 3 );
-    REQUIRE( result.count("primary") == 1 );
+    REQUIRE( result.count("vtk") == 1 );
     REQUIRE( result.count("half_levels") == 1 );
     REQUIRE( result.count("full_levels") == 1 );
 
-    // Primary axis must be "full_levels" axis
-    REQUIRE( result.at("primary").axisLength == 3 );
-    std::string axisDim = ncFile.GetDimName(result.at("primary").axisDimId);
+    // VTK axis has "full_levels" level heights, but count the number of cells
+    REQUIRE( result.at("vtk").axisLength == 3 );
+    std::string axisDim = ncFile.GetDimName(result.at("vtk").axisDimId);
     REQUIRE( axisDim == "full_levels" );
-    std::string axisVar = ncFile.GetVarName(result.at("primary").axisVarId);
+    std::string axisVar = ncFile.GetVarName(result.at("vtk").axisVarId);
     REQUIRE( axisVar == "full_levels" );
 
     // Check "full_levels" axis
-    REQUIRE( result.at("full_levels").axisLength == 3 );
+    REQUIRE( result.at("full_levels").axisLength == 4 );
     axisDim = ncFile.GetDimName(result.at("full_levels").axisDimId);
     REQUIRE( axisDim == "full_levels" );
     axisVar = ncFile.GetVarName(result.at("full_levels").axisVarId);
@@ -259,15 +259,15 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
 
     // Map needs to contain these three entries
     REQUIRE( result.size() == 3 );
-    REQUIRE( result.count("primary") == 1 );
+    REQUIRE( result.count("vtk") == 1 );
     REQUIRE( result.count("half_levels") == 1 );
     REQUIRE( result.count("full_levels") == 1 );
 
-    // Primary axis must be "half_levels" axis
-    REQUIRE( result.at("primary").axisLength == 3 );
-    std::string axisDim = ncFile.GetDimName(result.at("primary").axisDimId);
+    // VTK axis must be "half_levels" axis, counting the number of cells
+    REQUIRE( result.at("vtk").axisLength == 3 );
+    std::string axisDim = ncFile.GetDimName(result.at("vtk").axisDimId);
     REQUIRE( axisDim == "half_levels" );
-    std::string axisVar = ncFile.GetVarName(result.at("primary").axisVarId);
+    std::string axisVar = ncFile.GetVarName(result.at("vtk").axisVarId);
     REQUIRE( axisVar == "half_levels" );
 
     // Only "half_levels" axis is required
@@ -283,10 +283,10 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
     std::map<std::string, CFAxis> result = ncFile.GetZAxisDescription(false, halfLevelFaceMesh);
 
     REQUIRE( result.size() == 1 );
-    REQUIRE( result.count("primary") == 1 );
-    REQUIRE( result.at("primary").axisLength == 1 );
-    REQUIRE( result.at("primary").axisDimId == -1 );
-    REQUIRE( result.at("primary").axisVarId == -1 );
+    REQUIRE( result.count("vtk") == 1 );
+    REQUIRE( result.at("vtk").axisLength == 1 );
+    REQUIRE( result.at("vtk").axisDimId == -1 );
+    REQUIRE( result.at("vtk").axisVarId == -1 );
   }
 
   SECTION( "GetZAxisDescription Returns No Axis For Unknown Mesh" )
@@ -294,18 +294,18 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
     std::map<std::string, CFAxis> result = ncFile.GetZAxisDescription(false, unknownMesh);
 
     REQUIRE( result.size() == 1 );
-    REQUIRE( result.count("primary") == 1 );
-    REQUIRE( result.at("primary").axisLength == 1 );
-    REQUIRE( result.at("primary").axisDimId == -1 );
-    REQUIRE( result.at("primary").axisVarId == -1 );
+    REQUIRE( result.count("vtk") == 1 );
+    REQUIRE( result.at("vtk").axisLength == 1 );
+    REQUIRE( result.at("vtk").axisDimId == -1 );
+    REQUIRE( result.at("vtk").axisVarId == -1 );
 
     result = ncFile.GetZAxisDescription(true, unknownMesh);
 
     REQUIRE( result.size() == 1 );
-    REQUIRE( result.count("primary") == 1 );
-    REQUIRE( result.at("primary").axisLength == 1 );
-    REQUIRE( result.at("primary").axisDimId == -1 );
-    REQUIRE( result.at("primary").axisVarId == -1 );
+    REQUIRE( result.count("vtk") == 1 );
+    REQUIRE( result.at("vtk").axisLength == 1 );
+    REQUIRE( result.at("vtk").axisDimId == -1 );
+    REQUIRE( result.at("vtk").axisVarId == -1 );
   }
 
   SECTION( "GetTAxisDescription Returns No Axis" )
@@ -324,17 +324,25 @@ TEST_CASE( "Field Tests", "[metadata]" )
 {
   netCDFLFRicFile ncFile("testdata_single_mesh_valid.nc");
 
-  SECTION( "UpdateFieldMap Returns Correct Results" )
+  // Collect mesh metadata
+  UGRIDMeshDescription mesh2D = ncFile.GetMesh2DDescription();
+  CFAxis tAxis = ncFile.GetTAxisDescription();
+  std::map<std::string, CFAxis> zAxes = ncFile.GetZAxisDescription(mesh2D.isLFRicXIOSFile,
+                                                                   fullLevelFaceMesh);
+  std::map<std::string, DataField> cellfields;
+  std::map<std::string, DataField> pointfields;
+
+  SECTION( "UpdateFieldMap Returns Correct Results For LFRic Files" )
   {
-    std::map<std::string, DataField> fields;
-    ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_face"),
-                          halfLevelFaceMesh, ncFile.GetDimId("half_levels"),
-                          ncFile.GetDimId("full_levels"), -1);
-    REQUIRE( fields.size() == 3 );
+    ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
+
+    // Expect both cell data and point data
+    REQUIRE( cellfields.size() == 3 );
+    REQUIRE( pointfields.size() == 1 );
 
     // var1 has horizontal and vertical dimensions
-    REQUIRE( fields.count("var1") == 1 );
-    DataField & field = fields["var1"];
+    REQUIRE( cellfields.count("var1") == 1 );
+    DataField & field = cellfields["var1"];
     REQUIRE( field.active == false );
     REQUIRE( field.meshType == halfLevelFaceMesh );
     REQUIRE( field.location == cellFieldLoc );
@@ -350,8 +358,8 @@ TEST_CASE( "Field Tests", "[metadata]" )
     REQUIRE( field.dims[1].dimStride == 1 );
 
     // var2 has horizontal and component dimensions
-    REQUIRE( fields.count("var2") == 1 );
-    field = fields["var2"];
+    REQUIRE( cellfields.count("var2") == 1 );
+    field = cellfields["var2"];
     REQUIRE( field.active == false );
     REQUIRE( field.meshType == halfLevelFaceMesh );
     REQUIRE( field.location == cellFieldLoc );
@@ -367,8 +375,8 @@ TEST_CASE( "Field Tests", "[metadata]" )
     REQUIRE( field.dims[1].dimStride == 1 );
 
     // var3 has horizontal and vertical dimensions
-    REQUIRE( fields.count("var3") == 1 );
-    field = fields["var3"];
+    REQUIRE( cellfields.count("var3") == 1 );
+    field = cellfields["var3"];
     REQUIRE( field.active == false );
     REQUIRE( field.meshType == fullLevelFaceMesh );
     REQUIRE( field.location == cellFieldLoc );
@@ -382,66 +390,71 @@ TEST_CASE( "Field Tests", "[metadata]" )
     REQUIRE( field.dims[1].dimType == verticalAxisDim );
     REQUIRE( field.dims[1].dimLength == 4 );
     REQUIRE( field.dims[1].dimStride == 1 );
+
+    // var4 has horizontal and vertical dimensions
+    REQUIRE( pointfields.count("var4") == 1 );
+    field = pointfields["var4"];
+    REQUIRE( field.active == false );
+    REQUIRE( field.meshType == halfLevelEdgeMesh );
+    REQUIRE( field.location == pointFieldLoc );
+    REQUIRE( field.hasComponentDim == false );
+    REQUIRE( field.hasVerticalDim == true );
+    REQUIRE( field.hasTimeDim == false );
+    REQUIRE( field.dims.size() == 2 );
+    REQUIRE( field.dims[0].dimType == horizontalAxisDim );
+    REQUIRE( field.dims[0].dimLength == 108 );
+    REQUIRE( field.dims[0].dimStride == 3 );
+    REQUIRE( field.dims[1].dimType == verticalAxisDim );
+    REQUIRE( field.dims[1].dimLength == 3 );
+    REQUIRE( field.dims[1].dimStride == 1 );
   }
 
-  // To be reinstated when field discovery has been reworked
-  // SECTION( "UpdateFieldMap Returns Correct Number Of Fields For Alternative Vertical Axes" )
-  // {
-  //   std::map<std::string, DataField> fields;
-  //   ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_face"),
-  //                         fullLevelFaceMesh, ncFile.GetDimId("full_levels"), -1, -1);
-  //   REQUIRE( fields.size() == 1 );
-
-  //   fields.clear();
-  //   ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_face"),
-  //                         fullLevelFaceMesh, -1, ncFile.GetDimId("full_levels"), -1);
-  //   REQUIRE( fields.size() == 1 );
-
-  //   fields.clear();
-  //   ncFile.UpdateFieldMap(fields, "face", ncFile.GetDimId("nMesh2d_face"),
-  //                         fullLevelFaceMesh, ncFile.GetDimId("full_levels"),
-  //                         ncFile.GetDimId("full_levels"), -1);
-  //   REQUIRE( fields.size() == 1 );
-  // }
-
-  SECTION( "UpdateFieldMap Returns No Result For Undefined Location" )
+  SECTION( "UpdateFieldMaps Treats Unknown Full_Levels Axis As Component Dim" )
   {
-    std::map<std::string, DataField> fields;
-    ncFile.UpdateFieldMap(fields, "nowhere", ncFile.GetDimId("nMesh2d_half_levels_face"),
-                          halfLevelFaceMesh, ncFile.GetDimId("half_levels"), -1, -1);
-    REQUIRE( fields.size() == 0 );
+    // Remove full_levels axis
+    zAxes.erase("full_levels");
+
+    ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
+
+    // Expect all variables
+    REQUIRE( cellfields.size() == 3 );
+    REQUIRE( pointfields.size() == 1 );
   }
 
-  SECTION( "UpdateFieldMap Returns No Result For Two Unidentified Dimensions" )
+  SECTION( "UpdateFieldMaps Treats Unknown Half_Levels Axis As Component Dim" )
   {
-    std::map<std::string, DataField> fields;
-    ncFile.UpdateFieldMap(fields, "nowhere", -1, halfLevelFaceMesh, -1, -1, -1);
-    REQUIRE( fields.size() == 0 );
+    // Remove half_levels axis
+    zAxes.erase("half_levels");
+
+    ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
+
+    // Expect all variables
+    REQUIRE( cellfields.size() == 3 );
+    REQUIRE( pointfields.size() == 1 );
+  }
+
+  SECTION( "UpdateFieldMaps Ignores Vars With Unidentified Dimensions" )
+  {
+    mesh2D.faceDimId = -1;
+
+    ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
+
+    // Only edge field must be returned
+    REQUIRE( cellfields.size() == 0 );
+    REQUIRE( pointfields.size() == 1 );
   }
 
   SECTION( "UpdateDataFields Returns No Fields For Undefined Metadata" )
   {
-    UGRIDMeshDescription mesh2D;
-    CFAxis zAxis, tAxis;
-    std::map<std::string, DataField> cellfields, pointfields;
+    // Reset metadata
+    mesh2D = UGRIDMeshDescription();
+    tAxis = CFAxis();
+    zAxes.clear();
+
     // File is treated as a general UGRID file, which requires metadata to
     // identify all field dimensions and accept field variables
-    ncFile.UpdateDataFields(mesh2D, zAxis, tAxis, cellfields, pointfields);
+    ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
     REQUIRE( cellfields.size() == 0 );
-    REQUIRE( pointfields.size() == 0 );
-  }
-
-  SECTION( "UpdateDataFields Returns Correct Number Of Fields" )
-  {
-    UGRIDMeshDescription mesh2D;
-    CFAxis zAxis, tAxis;
-    std::map<std::string, DataField> cellfields, pointfields;
-
-    // Mark input file as LFRic XIOS file
-    mesh2D.isLFRicXIOSFile = true;
-
-    ncFile.UpdateDataFields(mesh2D, zAxis, tAxis, cellfields, pointfields);
-    REQUIRE( cellfields.size() == 3 );
     REQUIRE( pointfields.size() == 0 );
   }
 }

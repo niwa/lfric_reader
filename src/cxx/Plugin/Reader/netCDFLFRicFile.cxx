@@ -609,7 +609,11 @@ std::map<std::string, CFAxis> netCDFLFRicFile::GetZAxisDescription(const bool is
   std::map<std::string, CFAxis> verticalAxes;
 
   // Workaround for LFRic XIOS output files where vertical axes do not have
-  // attributes required by CF convention
+  // attributes required by CF convention.
+  // LFRic files typically have 2 vertical axes, "full_levels" (cell interfaces) and
+  // "half_levels" (cell mid-levels). We need to store these axes for accessing the data,
+  // and create a third axis ("vtk") that counts the number vertical levels, for creating
+  // the VTK grid.
   if (isLFRicXIOSFile and (meshType == fullLevelFaceMesh or meshType == halfLevelFaceMesh))
   {
     if (this->HasVar("full_levels"))
@@ -617,12 +621,13 @@ std::map<std::string, CFAxis> netCDFLFRicFile::GetZAxisDescription(const bool is
       CFAxis levels = CFAxis();
       levels.axisVarId = this->GetVarId("full_levels");
       levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
-      // Need the number of cells here, "full_levels" are interfaces between cells
-      levels.axisLength = this->GetDimLen(levels.axisDimId) - 1;
+      levels.axisLength = this->GetDimLen(levels.axisDimId);
       verticalAxes.insert(std::pair<std::string, CFAxis>("full_levels",levels));
       if (meshType == fullLevelFaceMesh)
       {
-        verticalAxes.insert(std::pair<std::string, CFAxis>("primary",levels));
+        verticalAxes.insert(std::pair<std::string, CFAxis>("vtk",levels));
+        // Need the number of cells here, "full_levels" are interfaces between cells
+        verticalAxes.at("vtk").axisLength -= 1;
       }
     }
     if (this->HasVar("half_levels"))
@@ -634,7 +639,7 @@ std::map<std::string, CFAxis> netCDFLFRicFile::GetZAxisDescription(const bool is
       verticalAxes.insert(std::pair<std::string, CFAxis>("half_levels",levels));
       if (meshType == halfLevelFaceMesh)
       {
-        verticalAxes.insert(std::pair<std::string, CFAxis>("primary",levels));
+        verticalAxes.insert(std::pair<std::string, CFAxis>("vtk",levels));
       }
     }
   }
@@ -657,18 +662,19 @@ std::map<std::string, CFAxis> netCDFLFRicFile::GetZAxisDescription(const bool is
           levels.axisLength = this->GetDimLen(levels.axisDimId);
           // Treat as "half-levels" axis by default
           verticalAxes.insert(std::pair<std::string, CFAxis>("half_levels",levels));
-          verticalAxes.insert(std::pair<std::string, CFAxis>("primary",levels));
+          verticalAxes.insert(std::pair<std::string, CFAxis>("vtk",levels));
         }
       }
     }
   }
 
-  // Assume 2D-only file and set vertical axis to single level if no axis found
-  if (verticalAxes.count("primary") == 0)
+  // Assume 2D-only file and set vertical axis to single level if no axis found,
+  // the data fields will not have a vertical dimension
+  if (verticalAxes.count("vtk") == 0)
   {
     CFAxis levels = CFAxis();
     levels.axisLength = 1;
-    verticalAxes.insert(std::pair<std::string, CFAxis>("primary",levels));
+    verticalAxes.insert(std::pair<std::string, CFAxis>("vtk",levels));
   }
 
   return verticalAxes;
@@ -700,17 +706,19 @@ CFAxis netCDFLFRicFile::GetTAxisDescription()
 
 //----------------------------------------------------------------------------
 
-// Discovers data fields in netCDF file using CF attributes and adds them to a
-// map if all variable dimensions can be identified
-void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
-                                     const std::string & fieldLoc,
-                                     const int horizontalDimId,
-                                     const mesh2DTypes & horizontalMeshType,
-                                     const int verticalDimId_1,
-                                     const int verticalDimId_2,
-                                     const int timeDimId)
+// Discovers data fields in netCDF file using CF attributes and adds them to
+// cell data and point data maps if all variable dimensions can be identified
+void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
+                                      const std::map<std::string, CFAxis> & zAxes,
+                                      const CFAxis & tAxis,
+                                      std::map<std::string, DataField> & CellFields,
+                                      std::map<std::string, DataField> & PointFields)
 {
   debugMacro("Entering netCDFLFRicFile::UpdateFieldMap...\n");
+
+  // There can be up to two vertical dimenions
+  const int halfLevelsDimId = zAxes.count("half_levels") > 0 ? zAxes.at("half_levels").axisDimId : -1;
+  const int fullLevelsDimId = zAxes.count("full_levels") > 0 ? zAxes.at("full_levels").axisDimId : -1;
 
   for (int varId = 0; varId < static_cast<int>(this->GetNumVars()); varId++)
   {
@@ -724,13 +732,9 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
                   this->VarHasAtt(varId, "coordinates") and
                   this->VarHasAtt(varId, "location");
 
-    // Check if data is defined on the requested location (e.g., faces)
-    if (valid)
-    {
-      valid &= this->GetAttText(varId, "location") == fieldLoc;
-    }
-
-    // Identify and record variable dimensions, and add field to map
+    // Identify and record variable dimensions, and add field to map if all
+    // dimensions have been identified (allowing for up to one unidentified
+    // one for multi-component fields)
     if (valid)
     {
       debugMacro("Variable has required netCDF attributes\n");
@@ -740,17 +744,6 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
       const size_t numDims = this->GetVarNumDims(varId);
       fieldSpec.dims.resize(numDims);
 
-      // Set target field location in VTK grid - currently always cell data
-      // except for W2 fields which are defined on half-level edge meshes
-      if (horizontalMeshType == halfLevelEdgeMesh)
-      {
-        fieldSpec.location = pointFieldLoc;
-      }
-      else
-      {
-        fieldSpec.location = cellFieldLoc;
-      }
-
       // Determine stride in flat data array for each dimension to
       // flexibly recover the data in any dimension order
       size_t stride = 1;
@@ -759,65 +752,71 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
       // unidentified and will be treated as a component dimension
       size_t numDimsIdentified = 0;
 
-      // Work backwards to simplify computing strides
+      // Loop over variable dims backwards to simplify computing strides
       for (size_t iDim = numDims-1; iDim < numDims; iDim--)
       {
         const int thisDimId = this->GetVarDimId(varId, iDim);
+        bool isIdentified = false;
 
-        // Match dim ID against expected names and record specs
-        if (thisDimId == horizontalDimId)
+        // Try to identify dim
+        if (thisDimId == mesh2D.edgeDimId)
         {
           fieldSpec.hasHorizontalDim = true;
-          // ToDo: workaround - find a better solution
-          if (fieldSpec.meshType == unknownMesh)
-          {
-            fieldSpec.meshType = horizontalMeshType;
-          }
+          fieldSpec.meshType = halfLevelEdgeMesh;
           fieldSpec.dims[iDim].dimType = horizontalAxisDim;
-          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDimId);
-          fieldSpec.dims[iDim].dimStride = stride;
-          numDimsIdentified++;
-          debugMacro("Found horizontal dim with length " << fieldSpec.dims[iDim].dimLength <<
-                     " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
+          isIdentified = true;
+          debugMacro("Found horizontal face dim\n");
         }
-        // Up to two vertical dimensions are possible
-        else if (thisDimId == verticalDimId_1 or thisDimId == verticalDimId_2)
+        else if (thisDimId == mesh2D.faceDimId)
         {
-          // ToDo: workaround - find a better solution
-          if ( thisDimId == verticalDimId_2 )
-          {
-            fieldSpec.meshType = fullLevelFaceMesh;
-          }
-          fieldSpec.hasVerticalDim = true;
-          fieldSpec.dims[iDim].dimType = verticalAxisDim;
-          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDimId);
-          fieldSpec.dims[iDim].dimStride = stride;
-          numDimsIdentified++;
-          debugMacro("Found vertical dim with length " << fieldSpec.dims[iDim].dimLength <<
-                     " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
+          fieldSpec.hasHorizontalDim = true;
+          // Assume half-level faces for now, if meshType has not been determined yet
+          if (fieldSpec.meshType == unknownMesh) fieldSpec.meshType = halfLevelFaceMesh;
+          fieldSpec.dims[iDim].dimType = horizontalAxisDim;
+          isIdentified = true;
+          debugMacro("Found horizontal face dim\n");
         }
-        else if (thisDimId == timeDimId)
+        else if (thisDimId == fullLevelsDimId or thisDimId == halfLevelsDimId)
+        {
+          fieldSpec.hasVerticalDim = true;
+          // Only face-type fields can be defined at full level (cell interfaces)
+          if (thisDimId == fullLevelsDimId) fieldSpec.meshType = fullLevelFaceMesh;
+          fieldSpec.dims[iDim].dimType = verticalAxisDim;
+          isIdentified = true;
+          debugMacro("Found vertical dim\n");
+        }
+        else if (thisDimId == tAxis.axisDimId)
         {
           fieldSpec.hasTimeDim = true;
           fieldSpec.dims[iDim].dimType = timeAxisDim;
-          fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDimId);
-          fieldSpec.dims[iDim].dimStride = stride;
-          numDimsIdentified++;
-          debugMacro("Found time dim with length " << fieldSpec.dims[iDim].dimLength <<
-                     " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
+          isIdentified = true;
+          debugMacro("Found time dim\n");
         }
-        // Only accept one component dimension with up to 9 components
+        // If dimension is not known, assume it is a component dimension if it
+        // has up to 9 components and no other component dimension has been set
         else if (this->GetDimLen(thisDimId) < 10 and not fieldSpec.hasComponentDim)
         {
           fieldSpec.hasComponentDim = true;
           fieldSpec.dims[iDim].dimType = componentAxisDim;
+          isIdentified = true;
+          debugMacro("Found component dim\n");
+        }
+        else
+        {
+          debugMacro("Could not identify dim " << this->GetDimName(thisDimId) <<
+                     " and it cannot be accepted as component dim\n");
+        }
+
+        // Record dimension length and stride for this dimension
+        if (isIdentified)
+        {
           fieldSpec.dims[iDim].dimLength = this->GetDimLen(thisDimId);
           fieldSpec.dims[iDim].dimStride = stride;
+          stride *= fieldSpec.dims[iDim].dimLength;
           numDimsIdentified++;
-          debugMacro("Found component dim with length " << fieldSpec.dims[iDim].dimLength <<
+          debugMacro("Dim has length " << fieldSpec.dims[iDim].dimLength <<
                      " and stride " << fieldSpec.dims[iDim].dimStride << "\n");
         }
-        stride *= this->GetDimLen(thisDimId);
       }
 
       debugMacro("Identified " << numDimsIdentified << " of " <<
@@ -831,12 +830,29 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
       if (valid)
       {
         const std::string varName = this->GetVarName(varId);
-        // If field is not in list, insert and default to "don't load"
-        std::map<std::string, DataField>::const_iterator it = fields.find(varName);
-        if (it == fields.end())
+
+        // Set target field location in VTK grid - currently always cell data
+        // except for W2 fields which are defined on half-level edge meshes
+        if (fieldSpec.meshType == halfLevelEdgeMesh)
         {
-          debugMacro("Field is valid and is not in list, inserting...\n");
-          fields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
+          fieldSpec.location = pointFieldLoc;
+          // If field is not in list, insert and default to "don't load"
+          std::map<std::string, DataField>::const_iterator it = PointFields.find(varName);
+          if (it == PointFields.end())
+          {
+            debugMacro("Field is valid and is not in PointFields list, inserting...\n");
+            PointFields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
+          }
+        }
+        else
+        {
+          fieldSpec.location = cellFieldLoc;
+          std::map<std::string, DataField>::const_iterator it = CellFields.find(varName);
+          if (it == CellFields.end())
+          {
+            debugMacro("Field is valid and is not in CellFields list, inserting...\n");
+            CellFields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
+          }
         }
       }
       else
@@ -846,73 +862,4 @@ void netCDFLFRicFile::UpdateFieldMap(std::map<std::string, DataField> & fields,
     }
   }
   debugMacro("Finished netCDFLFRicFile::UpdateFieldMap.\n");
-}
-
-//----------------------------------------------------------------------------
-
-void netCDFLFRicFile::UpdateDataFields(const UGRIDMeshDescription & mesh2D,
-                                       const CFAxis & zAxis,
-                                       const CFAxis & tAxis,
-                                       std::map<std::string, DataField> & CellFields,
-                                       std::map<std::string, DataField> & PointFields)
-{
-  // If this is an LFRic output file, add fields that are defined on all supported meshes,
-  // otherwise accept only fields on the single mesh that is expected to be of half-level type
-  if (mesh2D.isLFRicXIOSFile)
-  {
-    // Original LFRic output file format
-    if (this->HasDim("nMesh2d_half_levels_face"))
-    {
-      const int horizontalDimId = this->GetDimId("nMesh2d_half_levels_face");
-      const int verticalDimId = this->GetDimId("half_levels");
-      this->UpdateFieldMap(CellFields, "face", horizontalDimId,
-                           halfLevelFaceMesh, verticalDimId, -1, tAxis.axisDimId);
-    }
-    if (this->HasDim("nMesh2d_full_levels_face"))
-    {
-      const int horizontalDimId = this->GetDimId("nMesh2d_full_levels_face");
-      const int verticalDimId = this->GetDimId("full_levels");
-      this->UpdateFieldMap(CellFields, "face", horizontalDimId,
-                           fullLevelFaceMesh, verticalDimId, -1, tAxis.axisDimId);
-    }
-    if (this->HasDim("nMesh2d_edge_half_levels_edge"))
-    {
-      const int horizontalDimId = this->GetDimId("nMesh2d_edge_half_levels_edge");
-      const int verticalDimId = this->GetDimId("half_levels");
-      this->UpdateFieldMap(PointFields, "edge", horizontalDimId,
-                           halfLevelEdgeMesh, verticalDimId, -1, tAxis.axisDimId);
-    }
-    // LFRic output file format with partially consolidated and renamed horizontal domains
-    if (this->HasDim("nMesh2d_face_face"))
-    {
-      const int horizontalDimId = this->GetDimId("nMesh2d_face_face");
-      const int verticalDimIdHalf = this->GetDimId("half_levels");
-      const int verticalDimIdFull = this->GetDimId("full_levels");
-      this->UpdateFieldMap(CellFields, "face", horizontalDimId,
-                           halfLevelFaceMesh, verticalDimIdHalf,
-                           verticalDimIdFull, tAxis.axisDimId);
-    }
-    // LFRic output file format with fully consolidated and renamed horizontal domains
-    if (this->HasDim("nMesh2d_face"))
-    {
-      const int horizontalDimId = this->GetDimId("nMesh2d_face");
-      const int verticalDimIdHalf = this->GetDimId("half_levels");
-      const int verticalDimIdFull = this->GetDimId("full_levels");
-      this->UpdateFieldMap(CellFields, "face", horizontalDimId,
-                           halfLevelFaceMesh, verticalDimIdHalf,
-                           verticalDimIdFull, tAxis.axisDimId);
-    }
-    if (this->HasDim("nMesh2d_edge_edge"))
-    {
-      const int horizontalDimId = this->GetDimId("nMesh2d_edge_edge");
-      const int verticalDimId = this->GetDimId("half_levels");
-      this->UpdateFieldMap(PointFields, "edge", horizontalDimId,
-                           halfLevelEdgeMesh, verticalDimId, -1, tAxis.axisDimId);
-    }
-  }
-  else
-  {
-    this->UpdateFieldMap(CellFields, "face", mesh2D.faceDimId, halfLevelFaceMesh,
-                         zAxis.axisDimId, -1, tAxis.axisDimId);
-  }
 }

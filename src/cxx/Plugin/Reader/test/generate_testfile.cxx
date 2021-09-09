@@ -434,24 +434,17 @@ void generate_testfile(const bool multiple_mesh, const bool valid)
   if (multiple_mesh)
   {
     const int var4Dims[] = {nMesh2dEdgeHalfLevelsEdgeDimId, halfLevelsDimId};
-    ncErrorMacro(nc_def_var(ncId, "var4", NC_DOUBLE, 2, var4Dims, &var4Id));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "long_name", 4, "var4"));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "units", 4, "none"));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "mesh", 16, "value not needed"));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "location", 4, "edge"));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "coordinates", 16, "value not needed"));
-  }
+    ncErrorMacro(nc_def_var(ncId, "var4", NC_DOUBLE, 2, var4Dims, &var4Id));  }
   else
   {
-    const int var4Dims[] = {nMesh2dEdgeDimId, fullLevelsDimId};
+    const int var4Dims[] = {nMesh2dEdgeDimId, halfLevelsDimId};
     ncErrorMacro(nc_def_var(ncId, "var4", NC_DOUBLE, 2, var4Dims, &var4Id));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "long_name", 4, "var4"));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "units", 4, "none"));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "mesh", 16, "value not needed"));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "location", 4, "edge"));
-    ncErrorMacro(nc_put_att_text(ncId, var4Id, "coordinates", 16, "value not needed"));
   }
-
+  ncErrorMacro(nc_put_att_text(ncId, var4Id, "long_name", 4, "var4"));
+  ncErrorMacro(nc_put_att_text(ncId, var4Id, "units", 4, "none"));
+  ncErrorMacro(nc_put_att_text(ncId, var4Id, "mesh", 16, "value not needed"));
+  ncErrorMacro(nc_put_att_text(ncId, var4Id, "location", 4, "edge"));
+  ncErrorMacro(nc_put_att_text(ncId, var4Id, "coordinates", 16, "value not needed"));
 
   // End of define mode
   ncErrorMacro(nc_enddef(ncId));
@@ -716,50 +709,25 @@ void generate_testfile(const bool multiple_mesh, const bool valid)
   }
   ncErrorMacro(nc_put_vara_double(ncId, var3Id, start2, count2, varData.data()));
 
-  if (multiple_mesh)
+  // Edge-half-level 3D data with inverse dimension order
+  count2[0] = nMesh2dEdgeLen;
+  count2[1] = levelsLen;
+  varData.resize(count2[0]*count2[1]);
+  
+  // Fill array with number sequence to test ordering
+  for (size_t iLevel = 0; iLevel < levelsLen; iLevel++)
   {
-    // Edge-half-level 3D data with inverse dimension order
-    count2[0] = nMesh2dEdgeLen;
-    count2[1] = levelsLen;
-    varData.resize(count2[0]*count2[1]);
-  
-    // Fill array with number sequence to test ordering
-    for (size_t iLevel = 0; iLevel < levelsLen; iLevel++)
+    for (size_t iEdge = 0; iEdge < nMesh2dEdgeLen; iEdge++)
     {
-      for (size_t iEdge = 0; iEdge < nMesh2dEdgeLen; iEdge++)
-      {
-        const size_t iCell = iLevel*nMesh2dEdgeLen+iEdge;
-        varData[iEdge*levelsLen+iLevel] = static_cast<double>(iCell);
-      }
+      const size_t iCell = iLevel*nMesh2dEdgeLen+iEdge;
+      varData[iEdge*levelsLen+iLevel] = static_cast<double>(iCell);
     }
-  
-    // Store dimensions in the first 3 cells
-    varData[0] = static_cast<double>(nMesh2dEdgeLen);
-    varData[levelsLen] = static_cast<double>(levelsLen);
-    varData[2*levelsLen] = static_cast<double>(componentLen);
   }
-  else
-  {
-    // Full-level edge data with inverse dimension order
-    count2[0] = nMesh2dEdgeLen;
-    count2[1] = levelsLen+1;
-    varData.resize(count2[0]*count2[1]);
   
-    // Fill array with number sequence to test ordering
-    for (size_t iLevel = 0; iLevel < levelsLen+1; iLevel++)
-    {
-      for (size_t iEdge = 0; iEdge < nMesh2dEdgeLen; iEdge++)
-      {
-        const size_t iCell = iLevel*nMesh2dEdgeLen+iEdge;
-        varData[iEdge*(levelsLen+1)+iLevel] = static_cast<double>(iCell);
-      }
-    }
-  
-    // Store dimensions in the first 3 cells
-    varData[0] = static_cast<double>(nMesh2dEdgeLen);
-    varData[levelsLen+1] = static_cast<double>(levelsLen);
-    varData[2*(levelsLen+1)] = static_cast<double>(componentLen);
-  }
+  // Store dimensions in the first 3 cells
+  varData[0] = static_cast<double>(nMesh2dEdgeLen);
+  varData[levelsLen] = static_cast<double>(levelsLen);
+  varData[2*levelsLen] = static_cast<double>(componentLen);
   ncErrorMacro(nc_put_vara_double(ncId, var4Id, start2, count2, varData.data()));
 
   ncErrorMacro(nc_close(ncId));
