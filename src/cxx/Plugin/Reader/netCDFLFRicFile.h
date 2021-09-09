@@ -1,10 +1,10 @@
-/*
+/**
  * @class   netCDFLFRicFile
  * @brief   Utility class for netCDF file handling
  *
  * Reads metadata and data from a netCDF file using
  * convenient utility functions.
-*/
+ */
 
 #ifndef netCDFLFRicFile_h
 #define netCDFLFRicFile_h
@@ -117,48 +117,119 @@ class netCDFLFRicFile
 
 public:
 
+  /**
+   * Construct new netCDFLFRicFile object for netCDF file fileName.
+   * The file is opened on construction and will be closed by the
+   * destructor.
+   */
   netCDFLFRicFile(const char* fileName);
   ~netCDFLFRicFile();
 
+  /**
+   * Check if the class constructor managed to open the netCDF file.
+   */
   bool IsFileOpen();
 
+  /**
+   * Return name of the netCDF file.
+   */
   const char* GetFileName();
 
+  /**
+   * Check if netCDF dimension dimName exists.
+   */
   bool HasDim(const std::string& dimName);
 
+  /**
+   * Return length of netCDF dimension with ID dimId.
+   */
   size_t GetDimLen(const int dimId);
 
+  /**
+   * Return netCDF dimension ID for dimension dimName.
+   */
   int GetDimId(const std::string& dimName);
 
+  /**
+   * Return netCDF dimension name for ID dimId.
+   */
   std::string GetDimName(const int dimId);
 
+  /**
+   * Return netCDF variable ID for variable varName.
+   */
   int GetVarId(const std::string& varName);
 
+  /**
+   * Return netCDF variable name for ID varID.
+   */
   std::string GetVarName(const int varId);
 
+  /**
+   * Return the number of dimensions for netCDF variable with ID varId.
+   */
   size_t GetVarNumDims(const int varId);
 
+  /**
+   * Return ID of the dimth dimension of netCDF variable with ID varId.
+   */
   int GetVarDimId(const int varId, const size_t dim);
 
+  /**
+   * Return integer attribute attName of netCDF variable with ID varId.
+   */
   int GetAttInt(const int varId, const std::string& attName);
 
+  ///@{
+  /**
+   * Return string attribute attName of netCDF variable with ID varId
+   * or name varName.
+   */
   std::string GetAttText(const int varId, const std::string& attName);
   std::string GetAttText(const std::string& varName, const std::string& attName);
+  ///@}
 
+  /**
+   * Return string attribute attName of netCDF variable with ID varId
+   * split into a vector of strings.
+   */
   std::vector<std::string> GetAttTextSplit(const int varId,
                                            const std::string& attName);
 
+  /**
+   * Check if netCDF variable varName exists.
+   */
   bool HasVar(const std::string& varName);
 
+  /**
+   * Check if netCDF variable with ID varId has attribute attName.
+   */
   bool VarHasAtt(const int varId, const std::string& attName);
 
+  /**
+   * Return the total number of netCDF variables in the file.
+   */
   size_t GetNumVars();
 
+  /**
+   * Load data for double precision netCDF variable with ID varId
+   * into user-provided memory buffer, using vectors start and count
+   * for subsetting.
+   *
+   * @note Make sure that buffer is sufficiently larget to hold the
+   * data!
+   */
   void LoadVarDouble(const int varId,
                      const std::vector<size_t>& start,
                      const std::vector<size_t>& count,
                      double* buffer);
 
+  ///@{
+  /**
+   * Return double precision or long long vectors with data for
+   * netCDF variable with ID varID, using vectors start and count
+   * for subsetting.
+   */
   std::vector<double> GetVarDouble(const int varId,
                                    const std::vector<size_t>& start,
                                    const std::vector<size_t>& count);
@@ -166,6 +237,7 @@ public:
   std::vector<long long> GetVarLongLong(const int varId,
                                         const std::vector<size_t>& start,
                                         const std::vector<size_t>& count);
+  ///@}
 
   UGRIDMeshDescription GetMesh2DDescription();
 
