@@ -853,12 +853,16 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
           }
         }
         // Make all fields available as cell data
-        fieldSpec.location = cellFieldLoc;
-        std::map<std::string, DataField>::const_iterator it = CellFields.find(varName);
-        if (it == CellFields.end())
+        // W2 fields require face-edge connectivity data
+        if (fieldSpec.meshType != halfLevelEdgeMesh or mesh2D.faceEdgeConnVarId > -1)
         {
-          debugMacro("Field is valid and is not in CellFields list, inserting...\n");
-          CellFields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
+          fieldSpec.location = cellFieldLoc;
+          std::map<std::string, DataField>::const_iterator it = CellFields.find(varName);
+          if (it == CellFields.end())
+          {
+            debugMacro("Field is valid and is not in CellFields list, inserting...\n");
+            CellFields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
+          }
         }
       }
       else
