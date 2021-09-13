@@ -323,9 +323,9 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
       return 0;
     }
 
-    // Load requested field data for requested time step - currently only cell fields
+    // Load requested field data for requested time step
     if (!this->LoadFields(inputFile, outputGrid, this->CellFields,
-                          timestep,
+                          timestep, false,
                           static_cast<size_t>(startLevel),
                           static_cast<size_t>(numLevels)))
     {
@@ -348,7 +348,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
 
     // Load W2 fields
     if (!this->LoadFields(inputFile, outputGrid, this->PointFields,
-                          timestep,
+                          timestep, true,
                           static_cast<size_t>(startLevel),
                           static_cast<size_t>(numLevels)))
     {
@@ -497,10 +497,7 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
   SetPointLocationWorker pointsWorker(nodeCoordsX, nodeCoordsY, levels,
                                       this->UseCartCoords);
   typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Reals> pointsDispatcher;
-  if (!pointsDispatcher::Execute(pointLocs, pointsWorker))
-  {
-    pointsWorker(pointLocs);
-  }
+  if (!pointsDispatcher::Execute(pointLocs, pointsWorker)) pointsWorker(pointLocs);
 
   grid->SetPoints(points);
 
@@ -637,10 +634,7 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
   SetPointLocationWorker pointsWorker(edgeCoordsX, edgeCoordsY, levels,
                                       this->UseCartCoords);
   typedef vtkArrayDispatch::DispatchByValueType<vtkArrayDispatch::Reals> pointsDispatcher;
-  if (!pointsDispatcher::Execute(pointLocs, pointsWorker))
-  {
-    pointsWorker(pointLocs);
-  }
+  if (!pointsDispatcher::Execute(pointLocs, pointsWorker)) pointsWorker(pointLocs);
 
   grid->SetPoints(points);
 
@@ -694,8 +688,8 @@ int vtkNetCDFLFRicReader::CreateVTKPoints(netCDFLFRicFile& inputFile, vtkUnstruc
 // Read field data from netCDF file and add to the VTK grid
 int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructuredGrid * grid,
                                      const std::map<std::string, DataField> & fields,
-                                     const size_t timestep, const size_t startLevel,
-                                     const size_t numLevels)
+                                     const size_t timestep, const bool pointDataTarget,
+                                     const size_t startLevel, const size_t numLevels)
 {
   vtkDebugMacro("Entering LoadFields..." << endl);
 
@@ -708,11 +702,38 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
   this->SetProgressText("Loading Field Data");
   this->UpdateProgress(0.0);
 
-  // Count number of requested ("active") fields for progress meter
+  // Count number of requested ("active") fields for progress meter and check
+  // if an edge-centered field needs to be projected onto a cell-centered one
   int fieldCountActive = 0;
+  bool projectEdgeToCell = false;
   for (std::pair<std::string, DataField> const &field : fields)
   {
     if (field.second.active) fieldCountActive++;
+    if (field.second.meshType == halfLevelEdgeMesh and not pointDataTarget)
+    {
+      projectEdgeToCell = true;
+    }
+  }
+  if (projectEdgeToCell) vtkDebugMacro("Edge field(s) will be projected onto cells");
+
+  // Load face-edge connectivity for edge-to-cell projection
+  std::vector<long long> faceEdges;
+  if (projectEdgeToCell)
+  {
+    vtkDebugMacro("Loading face-edge connectivity for projecting edge fields..." << endl);
+    faceEdges = inputFile.GetVarLongLong(this->mesh2D.faceEdgeConnVarId,
+                                         {0,0}, {this->mesh2D.numFaces,
+                                         this->mesh2D.numEdgesPerFace});
+    // Correct edge IDs if non-zero start index
+    if (this->mesh2D.faceEdgeStartIdx != 0)
+    {
+      for (size_t idx = 0; idx < faceEdges.size(); idx++)
+      {
+        faceEdges[idx] -= this->mesh2D.faceEdgeStartIdx;
+      }
+      vtkDebugMacro("Corrected face-edge connectivity for start index=" <<
+                    this->mesh2D.faceEdgeStartIdx << endl);
+    }
   }
 
   int fieldCount = 0;
@@ -768,10 +789,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
             count[dimIdx] = numLevels;
             // Full-level meshes are defined on cell interfaces,
             // need to read extra level in that case
-            if (fieldSpec.meshType == fullLevelFaceMesh)
-	    {
-              count[dimIdx]++;
-            }
+            if (fieldSpec.meshType == fullLevelFaceMesh) count[dimIdx]++;
             break;
 
           case timeAxisDim:
@@ -826,11 +844,15 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
       // dim or if this subdomain includes the surface level
       if (fieldSpec.hasVerticalDim or (startLevel == 0))
       {
-        // Check if we can allow netCDF to write data directly into memory buffer
+        // Check if we can allow netCDF to write data directly into memory buffer:
+        // Dimension order must be vertical-horizontal-component (if applicable)
+        // Field must either be defined on edges without edge-to-cell projection,
+        // or on faces (cell volumes).
         const bool directLoad =
           (not fieldSpec.hasVerticalDim or (verticalStride > horizontalStride)) and
           (not fieldSpec.hasComponentDim or (horizontalStride > componentStride)) and
-          (fieldSpec.meshType == halfLevelEdgeMesh or fieldSpec.meshType == halfLevelFaceMesh);
+          ((fieldSpec.meshType == halfLevelEdgeMesh and not projectEdgeToCell) or
+           fieldSpec.meshType == halfLevelFaceMesh);
 
         vtkDebugMacro("Field can be loaded directly: " << directLoad << endl);
 
@@ -839,7 +861,7 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
           // Check buffer size
           if (totalCount > (numLevels*numHorizontal*numComponents))
           {
-            vtkErrorMacro("LoadFields: buffer to small for field " << fieldName << endl);
+            vtkErrorMacro("LoadFields: buffer too small for field " << fieldName << endl);
             return 0;
           }
           // Let netCDF write directly into vtkArray buffer - this requires dataField
@@ -854,42 +876,67 @@ int vtkNetCDFLFRicReader::LoadFields(netCDFLFRicFile & inputFile, vtkUnstructure
             inputFile.GetVarDouble(fieldNameVarId, start, count);
 
           // Sort data into VTK data structure
-          switch(fieldSpec.meshType)
+          if (fieldSpec.meshType == halfLevelEdgeMesh and projectEdgeToCell)
           {
-            case halfLevelEdgeMesh:
-            case halfLevelFaceMesh:
-              for (size_t bufferIdx = 0; bufferIdx < readBuffer.size(); bufferIdx++)
-              {
-                const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
-                const size_t iVertical = bufferIdx/verticalStride % numLevels;
-                const size_t iComponent = bufferIdx/componentStride % numComponents;
-                const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
-                dataField->SetComponent(iCell, iComponent, readBuffer[bufferIdx]);
-              }
-              break;
-            case fullLevelFaceMesh :
+            vtkDebugMacro("Half level edge data: averaging over edges around each face" << endl);
+            // In each level, loop over faces (cell volumes) and average data
+            // defined on its edges
+            for (size_t iLevel = 0; iLevel < numLevels; iLevel++)
             {
-              vtkDebugMacro("full level face mesh: averaging top and bottom faces" << endl);
-              const size_t numLevelsFull = numLevels+1;
-              for (size_t bufferIdx = 0; bufferIdx < readBuffer.size(); bufferIdx++)
+              for (size_t iFace = 0; iFace < this->mesh2D.numFaces; iFace++)
               {
-                const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
-                const size_t iVertical = bufferIdx/verticalStride % numLevelsFull;
-                const size_t iComponent = bufferIdx/componentStride % numComponents;
-                const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
-                // Skip the last full-level as we are averaging onto half-levels
-                if (iVertical < numLevels)
+                for (size_t iComponent = 0; iComponent < numComponents; iComponent++)
                 {
-                  const double fieldValue = 0.5*(readBuffer[bufferIdx]+
-                                                 readBuffer[bufferIdx+verticalStride]);
-                  dataField->SetComponent(iCell, iComponent, fieldValue);
+                  double cellData = 0.0;
+                  for (size_t iEdge = 0; iEdge < mesh2D.numEdgesPerFace; iEdge++)
+                  {
+                    const size_t edgeId = faceEdges[iFace*mesh2D.numEdgesPerFace+iEdge];
+                    const size_t bufferIdx = iLevel*verticalStride + edgeId*horizontalStride +
+                                             iComponent*componentStride;
+                    cellData += readBuffer[bufferIdx];
+                  }
+                  cellData *= 1.0/static_cast<double>(mesh2D.numEdgesPerFace);
+                  const size_t iCell = iLevel*mesh2D.numFaces + iFace;
+                  dataField->SetComponent(iCell, iComponent, cellData);
                 }
               }
-              break;
             }
-            default:
-              vtkErrorMacro("LoadFields: Unknown mesh type." << endl);
-              return 0;
+          }
+          else if ((fieldSpec.meshType == halfLevelEdgeMesh and not projectEdgeToCell) or
+                   fieldSpec.meshType == halfLevelFaceMesh)
+          {
+            for (size_t bufferIdx = 0; bufferIdx < readBuffer.size(); bufferIdx++)
+            {
+              const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
+              const size_t iVertical = bufferIdx/verticalStride % numLevels;
+              const size_t iComponent = bufferIdx/componentStride % numComponents;
+              const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
+              dataField->SetComponent(iCell, iComponent, readBuffer[bufferIdx]);
+            }
+          }
+          else if (fieldSpec.meshType == fullLevelFaceMesh)
+          {
+            vtkDebugMacro("Full level face data: averaging over top and bottom faces" << endl);
+            const size_t numLevelsFull = numLevels+1;
+            for (size_t bufferIdx = 0; bufferIdx < readBuffer.size(); bufferIdx++)
+            {
+              const size_t iHorizontal = bufferIdx/horizontalStride % numHorizontal;
+              const size_t iVertical = bufferIdx/verticalStride % numLevelsFull;
+              const size_t iComponent = bufferIdx/componentStride % numComponents;
+              const vtkIdType iCell = static_cast<vtkIdType>(iVertical*numHorizontal + iHorizontal);
+              // Skip the last full-level as we are averaging onto half-levels
+              if (iVertical < numLevels)
+              {
+                const double fieldValue = 0.5*(readBuffer[bufferIdx]+
+                                               readBuffer[bufferIdx+verticalStride]);
+                dataField->SetComponent(iCell, iComponent, fieldValue);
+              }
+            }
+          }
+          else
+          {
+            vtkErrorMacro("LoadFields: Unknown mesh type." << endl);
+            return 0;
           }
         }
       }
@@ -979,10 +1026,7 @@ const char* vtkNetCDFLFRicReader::GetCellArrayName(const int index)
   for (it = this->CellFields.begin(); it != this->CellFields.end();
        it++, counter++)
   {
-    if (counter == index)
-    {
-      return it->first.c_str();
-    }
+    if (counter == index) return it->first.c_str();
   }
   // Return nullptr by default - happens if index is out of range
   vtkDebugMacro("GetCellArrayName: out of range index=" << index << endl);
@@ -1040,10 +1084,7 @@ const char* vtkNetCDFLFRicReader::GetPointArrayName(const int index)
   for (it = this->PointFields.begin(); it != this->PointFields.end();
        it++, counter++)
   {
-    if (counter == index)
-    {
-      return it->first.c_str();
-    }
+    if (counter == index) return it->first.c_str();
   }
   vtkDebugMacro("GetPointArrayName: out of range index=" << index << endl);
   return nullptr;

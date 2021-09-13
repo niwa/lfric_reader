@@ -528,6 +528,13 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
       this->GetAttInt(mesh2D.faceNodeConnVarId, "start_index"));
   }
 
+  // Alternative face dimension ID for old LFRic output files, required
+  // for identifying field variables
+  if (mesh2D.isLFRicXIOSFile and this->HasDim("nMesh2d_half_levels_face"))
+  {
+    mesh2D.faceDimIdAlt = this->GetDimId("nMesh2d_half_levels_face");
+  }
+
   //
   // Get edge coordinate variables and their dimensions (if available)
   //
@@ -714,7 +721,7 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
                                       std::map<std::string, DataField> & CellFields,
                                       std::map<std::string, DataField> & PointFields)
 {
-  debugMacro("Entering netCDFLFRicFile::UpdateFieldMap...\n");
+  debugMacro("Entering netCDFLFRicFile::UpdateFieldMaps...\n");
 
   // There can be up to two vertical dimenions
   const int halfLevelsDimId = zAxes.count("half_levels") > 0 ? zAxes.at("half_levels").axisDimId : -1;
@@ -765,9 +772,10 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
           fieldSpec.meshType = halfLevelEdgeMesh;
           fieldSpec.dims[iDim].dimType = horizontalAxisDim;
           isIdentified = true;
-          debugMacro("Found horizontal face dim\n");
+          debugMacro("Found horizontal edge dim\n");
         }
-        else if (thisDimId == mesh2D.faceDimId)
+        // Older LFRic files can have two different face meshes
+        else if (thisDimId == mesh2D.faceDimId or thisDimId == mesh2D.faceDimIdAlt)
         {
           fieldSpec.hasHorizontalDim = true;
           // Assume half-level faces for now, if meshType has not been determined yet
@@ -831,8 +839,8 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
       {
         const std::string varName = this->GetVarName(varId);
 
-        // Set target field location in VTK grid - currently always cell data
-        // except for W2 fields which are defined on half-level edge meshes
+        // Make W2 fields, which are defined on half-level edge meshes
+        // available as point data
         if (fieldSpec.meshType == halfLevelEdgeMesh)
         {
           fieldSpec.location = pointFieldLoc;
@@ -844,15 +852,13 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
             PointFields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
           }
         }
-        else
+        // Make all fields available as cell data
+        fieldSpec.location = cellFieldLoc;
+        std::map<std::string, DataField>::const_iterator it = CellFields.find(varName);
+        if (it == CellFields.end())
         {
-          fieldSpec.location = cellFieldLoc;
-          std::map<std::string, DataField>::const_iterator it = CellFields.find(varName);
-          if (it == CellFields.end())
-          {
-            debugMacro("Field is valid and is not in CellFields list, inserting...\n");
-            CellFields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
-          }
+          debugMacro("Field is valid and is not in CellFields list, inserting...\n");
+          CellFields.insert(it, std::pair<std::string, DataField>(varName, fieldSpec));
         }
       }
       else
@@ -861,5 +867,5 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
       }
     }
   }
-  debugMacro("Finished netCDFLFRicFile::UpdateFieldMap.\n");
+  debugMacro("Finished netCDFLFRicFile::UpdateFieldMaps.\n");
 }

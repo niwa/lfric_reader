@@ -48,6 +48,9 @@ struct UGRIDMeshDescription
   int vertsPerFaceDimId;
   int edgesPerFaceDimId;
 
+  // Alternative face dimension ID for old LFRic output files
+  int faceDimIdAlt;
+
   // NetCDF variable IDs
   int meshTopologyVarId;
   int nodeCoordXVarId;
@@ -65,7 +68,7 @@ struct UGRIDMeshDescription
     meshType(unknownMesh), numNodes(0), numEdges(0), numFaces(0),
     numVertsPerFace(0), numEdgesPerFace(0),
     // Initialise netCDF IDs to -1 - valid IDs are always >= 0
-    nodeDimId(-1), edgeDimId(-1), faceDimId(-1),
+    nodeDimId(-1), edgeDimId(-1), faceDimId(-1), faceDimIdAlt(-1),
     vertsPerFaceDimId(-1), edgesPerFaceDimId(-1),
     meshTopologyVarId(-1), nodeCoordXVarId(-1), nodeCoordYVarId(-1),
     edgeCoordXVarId(-1), edgeCoordYVarId(-1), faceNodeConnVarId(-1), 

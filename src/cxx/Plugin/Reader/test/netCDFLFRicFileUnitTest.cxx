@@ -204,6 +204,20 @@ TEST_CASE( "UGRID, Vertical Axis, And Time Axis Tests", "[metadata]" )
     REQUIRE( result.numEdges == 108 );
     REQUIRE( result.numFaces == 54 );
     REQUIRE( result.numVertsPerFace == 4 );
+    REQUIRE( result.numEdgesPerFace == 4 );
+    REQUIRE( result.nodeDimId > -1 );
+    REQUIRE( result.edgeDimId > -1 );
+    REQUIRE( result.faceDimId > -1 );
+    REQUIRE( result.vertsPerFaceDimId > -1 );
+    REQUIRE( result.edgesPerFaceDimId > -1 );
+    REQUIRE( result.faceDimIdAlt == -1 );
+    REQUIRE( result.meshTopologyVarId > -1 );
+    REQUIRE( result.nodeCoordXVarId > -1 );
+    REQUIRE( result.nodeCoordYVarId > -1 );
+    REQUIRE( result.faceNodeConnVarId > -1 );
+    REQUIRE( result.faceEdgeConnVarId > -1 );
+    REQUIRE( result.edgeCoordXVarId > -1 );
+    REQUIRE( result.edgeCoordYVarId > -1 );
     const std::string meshTopologyVar = ncFile.GetVarName(result.meshTopologyVarId);
     REQUIRE( meshTopologyVar == "Mesh2d" );
     const std::string nodeCoordXVar = ncFile.GetVarName(result.nodeCoordXVarId);
@@ -337,7 +351,7 @@ TEST_CASE( "Field Tests", "[metadata]" )
     ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
 
     // Expect both cell data and point data
-    REQUIRE( cellfields.size() == 3 );
+    REQUIRE( cellfields.size() == 4 );
     REQUIRE( pointfields.size() == 1 );
 
     // var1 has horizontal and vertical dimensions
@@ -391,7 +405,24 @@ TEST_CASE( "Field Tests", "[metadata]" )
     REQUIRE( field.dims[1].dimLength == 4 );
     REQUIRE( field.dims[1].dimStride == 1 );
 
-    // var4 has horizontal and vertical dimensions
+    // var4 has horizontal and vertical dimensions (cell field)
+    REQUIRE( cellfields.count("var4") == 1 );
+    field = cellfields["var4"];
+    REQUIRE( field.active == false );
+    REQUIRE( field.meshType == halfLevelEdgeMesh );
+    REQUIRE( field.location == cellFieldLoc );
+    REQUIRE( field.hasComponentDim == false );
+    REQUIRE( field.hasVerticalDim == true );
+    REQUIRE( field.hasTimeDim == false );
+    REQUIRE( field.dims.size() == 2 );
+    REQUIRE( field.dims[0].dimType == horizontalAxisDim );
+    REQUIRE( field.dims[0].dimLength == 108 );
+    REQUIRE( field.dims[0].dimStride == 3 );
+    REQUIRE( field.dims[1].dimType == verticalAxisDim );
+    REQUIRE( field.dims[1].dimLength == 3 );
+    REQUIRE( field.dims[1].dimStride == 1 );
+
+    // var4 has horizontal and vertical dimensions (point field)
     REQUIRE( pointfields.count("var4") == 1 );
     field = pointfields["var4"];
     REQUIRE( field.active == false );
@@ -417,7 +448,7 @@ TEST_CASE( "Field Tests", "[metadata]" )
     ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
 
     // Expect all variables
-    REQUIRE( cellfields.size() == 3 );
+    REQUIRE( cellfields.size() == 4 );
     REQUIRE( pointfields.size() == 1 );
   }
 
@@ -429,7 +460,7 @@ TEST_CASE( "Field Tests", "[metadata]" )
     ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
 
     // Expect all variables
-    REQUIRE( cellfields.size() == 3 );
+    REQUIRE( cellfields.size() == 4 );
     REQUIRE( pointfields.size() == 1 );
   }
 
@@ -440,7 +471,7 @@ TEST_CASE( "Field Tests", "[metadata]" )
     ncFile.UpdateFieldMaps(mesh2D, zAxes, tAxis, cellfields, pointfields);
 
     // Only edge field must be returned
-    REQUIRE( cellfields.size() == 0 );
+    REQUIRE( cellfields.size() == 1 );
     REQUIRE( pointfields.size() == 1 );
   }
 

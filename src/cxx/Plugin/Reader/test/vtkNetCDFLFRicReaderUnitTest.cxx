@@ -121,7 +121,7 @@ TEST_CASE( "GetNumberOfCellArrays Method", "[paraview_interface]" )
     reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
     const int result = reader->GetNumberOfCellArrays();
-    REQUIRE( result == 3 );
+    REQUIRE( result == 4 );
   }
 
   reader->Delete();

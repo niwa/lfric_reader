@@ -354,7 +354,7 @@ TEST_CASE( "Point Data Fields", "[regression]" )
   reader->SetFileName("testdata_multiple_mesh_valid.nc");
   reader->SetOutputMode(1);
   reader->Update();
-  reader->SetPointArrayStatus("var4",1);
+  reader->SetPointArrayStatus("var4", 1);
   reader->Update();
   vtkUnstructuredGrid * grid = reader->GetOutput();
 
