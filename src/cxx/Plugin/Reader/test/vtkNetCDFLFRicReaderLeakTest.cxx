@@ -9,7 +9,7 @@ TEST_CASE( "Leak Test", "[leak]" )
 
   SECTION( "Load and Reload All Arrays Several Times" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
 
     const int nTimes = 10;

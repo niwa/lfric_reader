@@ -6,10 +6,12 @@
 int main( int argc, char * argv[] )
 {
 
-  // Create netCDF files with test data, one that
-  // is valid to read and one that is not
-  generate_testfile(true);
-  generate_testfile(false);
+  // Create netCDF files with test data,
+  // valid without and with multiple meshes, and
+  // invalid
+  generate_testfile(false, true);
+  generate_testfile(true, true);
+  generate_testfile(false, false);
 
   const int result = Catch::Session().run( argc, argv );
   return result;

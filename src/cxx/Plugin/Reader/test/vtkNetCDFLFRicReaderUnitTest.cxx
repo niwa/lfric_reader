@@ -89,13 +89,13 @@ TEST_CASE( "CanReadFile Method", "[vtk_interface]" )
 
   SECTION( "Invalid file" )
   {
-    const int result = reader->CanReadFile("testdata_invalid.nc");
+    const int result = reader->CanReadFile("testdata_single_mesh_invalid.nc");
     REQUIRE( result == 0 );
   }
 
   SECTION( "Valid file" )
   {
-    const int result = reader->CanReadFile("testdata_valid.nc");
+    const int result = reader->CanReadFile("testdata_single_mesh_valid.nc");
     REQUIRE( result == 1 );
   }
 
@@ -118,10 +118,10 @@ TEST_CASE( "GetNumberOfCellArrays Method", "[paraview_interface]" )
 
   SECTION( "File loaded" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
     const int result = reader->GetNumberOfCellArrays();
-    REQUIRE( result == 3 );
+    REQUIRE( result == 4 );
   }
 
   reader->Delete();
@@ -137,7 +137,7 @@ TEST_CASE( "GetCellArrayName Method", "[paraview_interface]" )
 
   SECTION( "Invalid Index (negative)" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
     const char* result = reader->GetCellArrayName(-1);
     REQUIRE( result == nullptr );
@@ -145,7 +145,7 @@ TEST_CASE( "GetCellArrayName Method", "[paraview_interface]" )
 
   SECTION( "Invalid Index (too large)" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
     const char* result = reader->GetCellArrayName(100);
     REQUIRE( result == nullptr );
@@ -153,7 +153,7 @@ TEST_CASE( "GetCellArrayName Method", "[paraview_interface]" )
 
   SECTION( "Valid Index" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
     const std::string result(reader->GetCellArrayName(0));
     REQUIRE( result == "var1" );
@@ -172,7 +172,7 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
 
   SECTION( "GetCellArrayStatus with Invalid Array Name" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
     const int result = reader->GetCellArrayStatus("thisfielddoesnotexist");
     REQUIRE( result == 0 );
@@ -180,7 +180,7 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
 
   SECTION( "GetCellArrayStatus Default Status" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
     for (int iarray = 0; iarray < reader->GetNumberOfCellArrays(); iarray++)
     {
@@ -192,7 +192,7 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
 
   SECTION( "SetCellArrayStatus with Invalid Array Name" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
     reader->SetCellArrayStatus("thisfielddoesnotexist",1);
     // Check if this has affected the status any of the existing arrays
@@ -206,7 +206,7 @@ TEST_CASE( "SetCellArrayStatus/GetCellArrayStatus Methods", "[paraview_interface
 
   SECTION( "SetCellArrayStatus with Valid Array Name" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_single_mesh_valid.nc");
     reader->Update();
 
     const int testarrayidx = 0;
@@ -256,7 +256,7 @@ TEST_CASE( "GetNumberOfPointArrays Method", "[paraview_interface]" )
 
   SECTION( "File loaded" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_multiple_mesh_valid.nc");
     reader->Update();
     const int result = reader->GetNumberOfPointArrays();
     REQUIRE( result == 1 );
@@ -275,7 +275,7 @@ TEST_CASE( "GetPointArrayName Method", "[paraview_interface]" )
 
   SECTION( "Invalid Index (negative)" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_multiple_mesh_valid.nc");
     reader->Update();
     const char* result = reader->GetPointArrayName(-1);
     REQUIRE( result == nullptr );
@@ -283,7 +283,7 @@ TEST_CASE( "GetPointArrayName Method", "[paraview_interface]" )
 
   SECTION( "Invalid Index (too large)" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_multiple_mesh_valid.nc");
     reader->Update();
     const char* result = reader->GetPointArrayName(100);
     REQUIRE( result == nullptr );
@@ -291,7 +291,7 @@ TEST_CASE( "GetPointArrayName Method", "[paraview_interface]" )
 
   SECTION( "Valid Index" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_multiple_mesh_valid.nc");
     reader->Update();
     const std::string result(reader->GetPointArrayName(0));
     REQUIRE( result == "var4" );
@@ -310,7 +310,7 @@ TEST_CASE( "SetPointArrayStatus/GetPointArrayStatus Methods", "[paraview_interfa
 
   SECTION( "GetPointArrayStatus with Invalid Array Name" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_multiple_mesh_valid.nc");
     reader->Update();
     const int result = reader->GetPointArrayStatus("thisfielddoesnotexist");
     REQUIRE( result == 0 );
@@ -318,7 +318,7 @@ TEST_CASE( "SetPointArrayStatus/GetPointArrayStatus Methods", "[paraview_interfa
 
   SECTION( "GetPointArrayStatus Default Status" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_multiple_mesh_valid.nc");
     reader->Update();
     for (int iarray = 0; iarray < reader->GetNumberOfPointArrays(); iarray++)
     {
@@ -330,7 +330,7 @@ TEST_CASE( "SetPointArrayStatus/GetPointArrayStatus Methods", "[paraview_interfa
 
   SECTION( "SetPointArrayStatus with Invalid Array Name" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_multiple_mesh_valid.nc");
     reader->Update();
     reader->SetPointArrayStatus("thisfielddoesnotexist",1);
     // Check if this has affected the status any of the existing arrays
@@ -344,7 +344,7 @@ TEST_CASE( "SetPointArrayStatus/GetPointArrayStatus Methods", "[paraview_interfa
 
   SECTION( "SetPointArrayStatus with Valid Array Name" )
   {
-    reader->SetFileName("testdata_valid.nc");
+    reader->SetFileName("testdata_multiple_mesh_valid.nc");
     reader->Update();
 
     const int testarrayidx = 0;

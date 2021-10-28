@@ -93,8 +93,8 @@ protected:
   // Read selected field data from netCDF file and add to the VTK grid
   int LoadFields(netCDFLFRicFile& inputFile, vtkUnstructuredGrid *grid,
                  const std::map<std::string, DataField> & fields,
-                 const size_t timestep, const size_t startLevel,
-                 const size_t numLevels);
+                 const size_t timestep, const bool pointDataTarget,
+                 const size_t startLevel, const size_t numLevels);
 
 private:
 
@@ -110,7 +110,7 @@ private:
   std::vector<double> TimeSteps;
 
   UGRIDMeshDescription mesh2D;
-  CFAxis zAxis;
+  std::map<std::string, CFAxis> zAxes;
   CFAxis tAxis;
 
 };

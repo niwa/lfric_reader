@@ -79,10 +79,33 @@ private:
   const bool cartCoords;
 };
 
+void resolveLongitudeGap(std::vector<double> & nodeCoordsLon,
+                         const double lonMin,
+                         const double lonMax,
+                         const double lonGapSizeThreshold);
+
+int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
+                      const std::vector<double> & nodeCoordsLat,
+                      const std::vector<long long> & faceNodeConnectivity,
+                      const size_t numFaces,
+                      const size_t numVertsPerFace,
+                      double & solidAngle,
+                      bool & hasWrapAroundCells);
+
 void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
                          std::vector<double> & nodeCoordsY,
                          std::vector<long long> & faceNodeConnectivity,
                          const size_t numFaces,
-                         const size_t numVertsPerFace);
+                         const size_t numVertsPerFace,
+                         const bool globalModel,
+                         const double latMin,
+                         const double latMax,
+                         const double lonMin,
+                         const double lonMax);
 
+void prepareGrid(std::vector<double> & nodeCoordsLon,
+                 std::vector<double> & nodeCoordsLat,
+                 std::vector<long long> & faceNodeConnectivity,
+                 const size_t numFaces,
+                 const size_t numVertsPerFace);
 #endif

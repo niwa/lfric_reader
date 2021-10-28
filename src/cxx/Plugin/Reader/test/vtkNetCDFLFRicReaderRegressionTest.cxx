@@ -12,7 +12,7 @@ TEST_CASE( "UnstructuredGrid Properties - Full Grid", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_single_mesh_valid.nc");
   reader->Update();
   vtkUnstructuredGrid * grid = reader->GetOutput();
 
@@ -124,7 +124,7 @@ TEST_CASE( "UnstructuredGrid Properties - Point Grid", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_multiple_mesh_valid.nc");
   reader->SetOutputMode(1);
   reader->Update();
   vtkUnstructuredGrid * grid = reader->GetOutput();
@@ -236,7 +236,7 @@ TEST_CASE( "Cell Data Fields", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_single_mesh_valid.nc");
   reader->Update();
   reader->SetCellArrayStatus("var1",1);
   reader->SetCellArrayStatus("var2",1);
@@ -351,10 +351,10 @@ TEST_CASE( "Point Data Fields", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_multiple_mesh_valid.nc");
   reader->SetOutputMode(1);
   reader->Update();
-  reader->SetPointArrayStatus("var4",1);
+  reader->SetPointArrayStatus("var4", 1);
   reader->Update();
   vtkUnstructuredGrid * grid = reader->GetOutput();
 
@@ -385,7 +385,6 @@ TEST_CASE( "Point Data Fields", "[regression]" )
     // Retrieve dimensions from the first cells
     const vtkIdType edgeLen = static_cast<vtkIdType>(dataArray->GetComponent(0, 0));
     const vtkIdType levelsLen = static_cast<vtkIdType>(dataArray->GetComponent(1, 0));
-    const vtkIdType componentLen = static_cast<vtkIdType>(dataArray->GetComponent(2, 0));
 
     // Check data array size
     REQUIRE( dataArray->GetNumberOfTuples() == edgeLen*levelsLen );
@@ -409,7 +408,7 @@ TEST_CASE( "Grid Partitioning", "[regression]" )
 {
 
   vtkNetCDFLFRicReader * reader = vtkNetCDFLFRicReader::New();
-  reader->SetFileName("testdata_valid.nc");
+  reader->SetFileName("testdata_single_mesh_valid.nc");
   reader->SetUseIndexAsVertCoord(1);
   reader->Update();
 
