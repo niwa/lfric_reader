@@ -110,7 +110,7 @@ TEST_CASE( "NetCDF Metadata Tests", "[metadata]" )
 
   SECTION( "GetAttTextSplit Returns Correct Attributes" )
   {
-    const int varId = ncFile.GetVarId("Mesh2d_full_levels");
+    const int varId = ncFile.GetVarId("Mesh2d");
     std::vector<std::string> result =
       ncFile.GetAttTextSplit(varId, "node_coordinates");
 
