@@ -320,11 +320,12 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
 
 //----------------------------------------------------------------------------
 
-void prepareGrid(std::vector<double> & nodeCoordsLon,
-                 std::vector<double> & nodeCoordsLat,
+void prepareGrid(std::vector<double> & nodeCoordsX,
+                 std::vector<double> & nodeCoordsY,
                  std::vector<long long> & faceNodeConnectivity,
                  const size_t numFaces,
-                 const size_t numVertsPerFace)
+                 const size_t numVertsPerFace,
+                 const bool isPlanarLAM)
 {
   debugMacro("Entering prepareGrid..." << endl);
 
@@ -332,42 +333,48 @@ void prepareGrid(std::vector<double> & nodeCoordsLon,
   // Determine mesh dimensions
   //
 
-  // Determine mesh longitude and latitude ranges
-  const auto lonMinMaxIt = std::minmax_element(nodeCoordsLon.begin(), nodeCoordsLon.end());
-  const double lonMin = *lonMinMaxIt.first;
-  const double lonMax = *lonMinMaxIt.second;
+  // Determine horizontal coordinate ranges
+  const auto xMinMaxIt = std::minmax_element(nodeCoordsX.begin(), nodeCoordsX.end());
+  const double xMin = *xMinMaxIt.first;
+  const double xMax = *xMinMaxIt.second;
 
-  const auto latMinMaxIt = std::minmax_element(nodeCoordsLat.begin(), nodeCoordsLat.end());
-  const double latMin = *latMinMaxIt.first;
-  const double latMax = *latMinMaxIt.second;
+  const auto yMinMaxIt = std::minmax_element(nodeCoordsY.begin(), nodeCoordsY.end());
+  const double yMin = *yMinMaxIt.first;
+  const double yMax = *yMinMaxIt.second;
 
-  debugMacro("prepareGrid: Found mesh longitude range of [" <<
-             lonMin << "," << lonMax << "] and latitude range of [" <<
-             latMin << "," << latMax << "]" << endl);
-
-  //
-  // Detect and possibly resolve gap in longitudes for LAMs that cross the dateline
-  //
-
-  const double lonGapSizeThreshold = 30.0;
-  resolveLongitudeGap(nodeCoordsLon, lonMin, lonMax, lonGapSizeThreshold);
+  debugMacro("prepareGrid: Found X coord range of [" <<
+             xMin << "," << xMax << "] and Y coord range of [" <<
+             yMin << "," << yMax << "]" << endl);
 
   //
-  // Detect grid type (global or LAM)
+  // Detect and possibly resolve gap in longitudes for non-planar-LAMs that cross the dateline
+  //
+
+  if (not isPlanarLAM)
+  {
+    const double lonGapSizeThreshold = 30.0;
+    resolveLongitudeGap(nodeCoordsX, xMin, xMax, lonGapSizeThreshold);
+  }
+
+  //
+  // Detect grid type (global or LAM), if not planar LAM
   //
 
   double solidAngle = 0.0;
   bool hasWrapAroundCells = false;
-  if (computeSolidAngle(nodeCoordsLon, nodeCoordsLat, faceNodeConnectivity,
-                        numFaces, numVertsPerFace, solidAngle, hasWrapAroundCells))
+  if (not isPlanarLAM)
   {
-    errorMacro("prepareGrid: ERROR: computeSolidAngle returned error" << endl);
-    return;
+    if (computeSolidAngle(nodeCoordsX, nodeCoordsY, faceNodeConnectivity,
+                          numFaces, numVertsPerFace, solidAngle, hasWrapAroundCells))
+    {
+      errorMacro("prepareGrid: ERROR: computeSolidAngle returned error" << endl);
+      return;
+    }
   }
 
   const double solidAngleThreshold = 3.0*vtkMath::Pi();
   bool globalModel = false;
-  if (solidAngle > solidAngleThreshold)
+  if (solidAngle > solidAngleThreshold and not isPlanarLAM)
   {
     globalModel = true;
     debugMacro("prepareGrid: Assuming mesh is global." << endl);
@@ -377,11 +384,12 @@ void prepareGrid(std::vector<double> & nodeCoordsLon,
     debugMacro("prepareGrid: Assuming mesh is LAM." << endl);
   }
 
-  if (hasWrapAroundCells)
+  // computeSolidAngle scans for wrap-around cells, but is only executed when isPlanarLAM == false
+  if (hasWrapAroundCells or isPlanarLAM)
   {
-    resolvePeriodicGrid(nodeCoordsLon, nodeCoordsLat, faceNodeConnectivity,
-                        numFaces, numVertsPerFace, globalModel, latMin,
-                        latMax, lonMin, lonMax);
+    resolvePeriodicGrid(nodeCoordsX, nodeCoordsY, faceNodeConnectivity,
+                        numFaces, numVertsPerFace, globalModel, yMin,
+                        yMax, xMin, xMax);
   }
 
   debugMacro("Finished prepareGrid" << endl);

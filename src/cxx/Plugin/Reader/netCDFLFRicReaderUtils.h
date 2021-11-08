@@ -103,9 +103,10 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
                          const double lonMin,
                          const double lonMax);
 
-void prepareGrid(std::vector<double> & nodeCoordsLon,
-                 std::vector<double> & nodeCoordsLat,
+void prepareGrid(std::vector<double> & nodeCoordsX,
+                 std::vector<double> & nodeCoordsY,
                  std::vector<long long> & faceNodeConnectivity,
                  const size_t numFaces,
-                 const size_t numVertsPerFace);
+                 const size_t numVertsPerFace,
+                 const bool isPlanarLAM);
 #endif

@@ -28,6 +28,9 @@ struct UGRIDMeshDescription
   // LFRic XIOS output files require special treatment
   bool isLFRicXIOSFile;
 
+  // Some mesh detection steps can be skipped for planar LAMs
+  bool isPlanarLAM;
+
   // Up to three topologies can exist
   size_t numTopologies;
 
@@ -64,9 +67,9 @@ struct UGRIDMeshDescription
   long long faceNodeStartIdx;
   long long faceEdgeStartIdx;
 
-  UGRIDMeshDescription() : isLFRicXIOSFile(false), numTopologies(0),
+  UGRIDMeshDescription() : isLFRicXIOSFile(false), isPlanarLAM(false),
     meshType(unknownMesh), numNodes(0), numEdges(0), numFaces(0),
-    numVertsPerFace(0), numEdgesPerFace(0),
+    numVertsPerFace(0), numEdgesPerFace(0), numTopologies(0),
     // Initialise netCDF IDs to -1 - valid IDs are always >= 0
     nodeDimId(-1), edgeDimId(-1), faceDimId(-1), faceDimIdAlt(-1),
     vertsPerFaceDimId(-1), edgesPerFaceDimId(-1),

@@ -468,20 +468,30 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   }
 
   // Longitude must be the "x axis" to detect cubed-sphere grids
-  if (this->GetAttText(nodeCoordVarNames[0], "standard_name") == "latitude")
+  if (this->GetAttText(nodeCoordVarNames[0], "standard_name") == "latitude" or
+      this->GetAttText(nodeCoordVarNames[0], "standard_name") == "projection_y_coordinate")
   {
     nodeCoordVarNames[0].swap(nodeCoordVarNames[1]);
   }
 
-  if (this->GetAttText(nodeCoordVarNames[0], "standard_name") != "longitude" or
-      this->GetAttText(nodeCoordVarNames[1], "standard_name") != "latitude")
+  if ((this->GetAttText(nodeCoordVarNames[0], "standard_name") != "longitude" and
+       this->GetAttText(nodeCoordVarNames[0], "standard_name") != "projection_x_coordinate") or
+      (this->GetAttText(nodeCoordVarNames[1], "standard_name") != "latitude" and
+       this->GetAttText(nodeCoordVarNames[1], "standard_name") != "projection_y_coordinate"))
   {
-    std::cerr << "GetMesh2DDescription: Node coord variables must be named latitude/longitude.\n";
+    std::cerr << "GetMesh2DDescription: Node coord variables must be named latitude/longitude " <<
+      "or projection_x_coordinate/projection_y_coordinate.\n";
     return UGRIDMeshDescription();
   }
 
   mesh2D.nodeCoordXVarId = this->GetVarId(nodeCoordVarNames[0]);
   mesh2D.nodeCoordYVarId = this->GetVarId(nodeCoordVarNames[1]);
+
+  // Planar LAMs use "m" as location units
+  if (this->GetAttText(mesh2D.nodeCoordXVarId, "units") == "m")
+  {
+    mesh2D.isPlanarLAM = true;
+  }
 
   // Get node dimension name and length
   mesh2D.nodeDimId = this->GetVarDimId(mesh2D.nodeCoordXVarId, 0);
@@ -567,10 +577,13 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
       edgeCoordVarNames[0].swap(edgeCoordVarNames[1]);
     }
 
-    if (this->GetAttText(edgeCoordVarNames[0], "standard_name") != "longitude" or
-        this->GetAttText(edgeCoordVarNames[1], "standard_name") != "latitude")
+  if ((this->GetAttText(edgeCoordVarNames[0], "standard_name") != "longitude" and
+       this->GetAttText(edgeCoordVarNames[0], "standard_name") != "projection_x_coordinate") or
+      (this->GetAttText(edgeCoordVarNames[1], "standard_name") != "latitude" and
+       this->GetAttText(edgeCoordVarNames[1], "standard_name") != "projection_y_coordinate"))
     {
-      std::cerr << "GetMesh2DDescription: Edge coord variables must be named latitude/longitude.\n";
+      std::cerr << "GetMesh2DDescription: Edge coord variables must be named latitude/longitude " <<
+      "or projection_x_coordinate/projection_y_coordinate.\n";
       return UGRIDMeshDescription();
     }
 
@@ -590,7 +603,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
       if (mesh2D.faceDimId != this->GetVarDimId(mesh2D.faceEdgeConnVarId, 0))
       {
-        std::cerr << "GetMesh2DDescription: edge_node_connectivity must have face dimension first.\n";
+        std::cerr << "GetMesh2DDescription: face_edge_connectivity must have face dimension first.\n";
         return UGRIDMeshDescription();
       }
 

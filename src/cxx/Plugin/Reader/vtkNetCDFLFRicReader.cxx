@@ -475,7 +475,8 @@ int vtkNetCDFLFRicReader::CreateVTKGrid(netCDFLFRicFile& inputFile, vtkUnstructu
     vtkDebugMacro("Preparing grid for projected view..." << endl);
 
     prepareGrid(nodeCoordsX, nodeCoordsY, faceNodes,
-                this->mesh2D.numFaces, this->mesh2D.numVertsPerFace);
+                this->mesh2D.numFaces, this->mesh2D.numVertsPerFace,
+                this->mesh2D.isPlanarLAM);
     // Update node count to allow for possibly added nodes
     numNodesCurrent = nodeCoordsX.size();
   }
