@@ -140,25 +140,27 @@ def generate_edge_coords(nc_file, output_mesh_name):
 
     if 'edge_coordinates' not in dir(nc_file.variables[output_mesh_name]):
         logging.info('Generating edge coordinates...')
+        # Assume XIOS UGRID naming convention
         edge_node_conn = nc_file.variables[output_mesh_name + '_edge_nodes']
         if 'start_index' in dir(edge_node_conn):
             start_idx = int(edge_node_conn.start_index)
         else:
             start_idx = 0
-        node_lon = nc_file.variables[output_mesh_name + '_node_x']
-        node_lat = nc_file.variables[output_mesh_name + '_node_y']
-        edge_lon_var = nc_file.createVariable(output_mesh_name + '_edge_x', node_lon.datatype,
-                                              'n' + output_mesh_name + '_edge')
-        edge_lon_var[:] = 0.5*(node_lon[edge_node_conn[:,0] - start_idx] + \
-                               node_lon[edge_node_conn[:,1] - start_idx])
-        for att in node_lon.ncattrs():
-            edge_lon_var.setncattr(att, node_lon.getncattr(att).replace('node', 'edge'))
-        edge_lat_var = nc_file.createVariable(output_mesh_name + '_edge_y', node_lat.datatype,
-                                              'n' + output_mesh_name + '_edge')
-        edge_lat_var[:] = 0.5*(node_lat[edge_node_conn[:,0] - start_idx] + \
-                               node_lat[edge_node_conn[:,1] - start_idx])
-        for att in node_lat.ncattrs():
-            edge_lat_var.setncattr(att, node_lat.getncattr(att).replace('node', 'edge'))
+        # Assume XIOS UGRID naming convention
+        node_x = nc_file.variables[output_mesh_name + '_node_x']
+        node_y = nc_file.variables[output_mesh_name + '_node_y']
+        edge_x_var = nc_file.createVariable(output_mesh_name + '_edge_x', node_x.datatype,
+                                            'n' + output_mesh_name + '_edge')
+        edge_x_var[:] = 0.5*(node_x[edge_node_conn[:,0] - start_idx] + \
+                             node_x[edge_node_conn[:,1] - start_idx])
+        for att in node_x.ncattrs():
+            edge_x_var.setncattr(att, node_x.getncattr(att).replace('node', 'edge'))
+        edge_y_var = nc_file.createVariable(output_mesh_name + '_edge_y', node_y.datatype,
+                                            'n' + output_mesh_name + '_edge')
+        edge_y_var[:] = 0.5*(node_y[edge_node_conn[:,0] - start_idx] + \
+                             node_y[edge_node_conn[:,1] - start_idx])
+        for att in node_y.ncattrs():
+            edge_y_var.setncattr(att, node_y.getncattr(att).replace('node', 'edge'))
         nc_file.variables[output_mesh_name].setncattr('edge_coordinates', output_mesh_name + \
                                                       '_edge_x ' + output_mesh_name + '_edge_y')
 
@@ -216,6 +218,13 @@ def write_field_vars(nc_file, fields, output_mesh_name):
                 output_field_dims.append(dim)
 
         field_var = nc_file.createVariable(field.name, field.datatype, output_field_dims)
+
+        if field_var.shape != field.shape:
+            msg = 'Variable {}: shape does not match new field dimensions, '.format(field.name) + \
+                  repr(field.shape) + ' != ' + repr(field_var.shape)
+            logging.critical(msg)
+            raise RuntimeError()
+
         field_var[:] = field[:]
 
         for att in field.ncattrs():
