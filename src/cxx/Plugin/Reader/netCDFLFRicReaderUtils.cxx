@@ -164,7 +164,7 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
   if (globalModel)
   {
     // Assume cubed-sphere grid with range (newer output files use -180..180 degrees)
-    if (lonMin >= -180.0 and lonMax <= 180.0)
+    if (lonMin >= -180.0 && lonMax <= 180.0)
     {
       lonOffset = 0.0;
       latOffset = 0.0;
@@ -173,7 +173,7 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
       debugMacro("resolvePeriodicGrid: Assuming cubed-sphere grid with -180..180 lon range, setting lonOffset=" <<
                  lonOffset << " latOffset=" << latOffset << endl);
     }
-    else if (lonMin >= 0.0 and lonMax <= 360.0)
+    else if (lonMin >= 0.0 && lonMax <= 360.0)
     {
       lonOffset = 180.0;
       latOffset = 0.0;
@@ -241,7 +241,7 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
 
     // If face spans across, loop over vertices (nodes) and mirror
     // nodes at the left boundary to resolve grid periodicity
-    if (spanLon or spanLat)
+    if (spanLon || spanLat)
     {
       for (size_t iVertex = 0; iVertex < numVertsPerFace; iVertex++)
       {
@@ -252,7 +252,7 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
         const double nodeCoordsOffsetLat = nodeCoordsLat[nodeId] - latOffset;
 
         // Mirror corner nodes
-        if (spanLon and spanLat and nodeCoordsOffsetLon < 0 and nodeCoordsOffsetLat < 0)
+        if (spanLon && spanLat && nodeCoordsOffsetLon < 0 && nodeCoordsOffsetLat < 0)
         {
           // Keep track of mirrored node to avoid degeneracy; insert a new node if
           // no mirror node has been created yet
@@ -273,8 +273,8 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
           }
         }
         // Mirror nodes on left or right domain boundary
-        else if (spanLon and ((nodeCoordsOffsetLon < 0 and mirrorFromWest) or \
-                              (nodeCoordsOffsetLon > 0 and not mirrorFromWest)))
+        else if (spanLon && ((nodeCoordsOffsetLon < 0 && mirrorFromWest) || \
+                             (nodeCoordsOffsetLon > 0 && !mirrorFromWest)))
         {
           mirrorNodesIt = mirrorNodesLon.find(nodeId);
           if (mirrorNodesIt == mirrorNodesLon.end())
@@ -291,7 +291,7 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
           }
         }
         // Mirror nodes on bottom domain boundary
-        else if (spanLat and nodeCoordsOffsetLat < 0)
+        else if (spanLat && nodeCoordsOffsetLat < 0)
         {
           mirrorNodesIt = mirrorNodesLat.find(nodeId);
           if (mirrorNodesIt == mirrorNodesLat.end())
@@ -350,7 +350,7 @@ void prepareGrid(std::vector<double> & nodeCoordsX,
   // Detect and possibly resolve gap in longitudes for non-planar-LAMs that cross the dateline
   //
 
-  if (not isPlanarLAM)
+  if (!isPlanarLAM)
   {
     const double lonGapSizeThreshold = 30.0;
     resolveLongitudeGap(nodeCoordsX, xMin, xMax, lonGapSizeThreshold);
@@ -362,7 +362,7 @@ void prepareGrid(std::vector<double> & nodeCoordsX,
 
   double solidAngle = 0.0;
   bool hasWrapAroundCells = false;
-  if (not isPlanarLAM)
+  if (!isPlanarLAM)
   {
     if (computeSolidAngle(nodeCoordsX, nodeCoordsY, faceNodeConnectivity,
                           numFaces, numVertsPerFace, solidAngle, hasWrapAroundCells))
@@ -374,7 +374,7 @@ void prepareGrid(std::vector<double> & nodeCoordsX,
 
   const double solidAngleThreshold = 3.0*vtkMath::Pi();
   bool globalModel = false;
-  if (solidAngle > solidAngleThreshold and not isPlanarLAM)
+  if (!isPlanarLAM && solidAngle > solidAngleThreshold)
   {
     globalModel = true;
     debugMacro("prepareGrid: Assuming mesh is global." << endl);
@@ -385,7 +385,7 @@ void prepareGrid(std::vector<double> & nodeCoordsX,
   }
 
   // computeSolidAngle scans for wrap-around cells, but is only executed when isPlanarLAM == false
-  if (hasWrapAroundCells or isPlanarLAM)
+  if (hasWrapAroundCells || isPlanarLAM)
   {
     resolvePeriodicGrid(nodeCoordsX, nodeCoordsY, faceNodeConnectivity,
                         numFaces, numVertsPerFace, globalModel, yMin,

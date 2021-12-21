@@ -12,6 +12,12 @@
 #include <string>
 #include <map>
 
+// MSVC compiler requires explicit symbol import/export for DLLs
+// Use mechanism provided by VTK/ParaView build system to handle
+// this automatically
+#include "vtkNetCDFLFRicReaderModule.h"
+#define NETCDFLFRICFILE_EXPORT VTKNETCDFLFRICREADER_EXPORT
+
 // LFRic 2D mesh types
 enum mesh2DTypes {unknownMesh, halfLevelEdgeMesh, halfLevelFaceMesh, fullLevelFaceMesh};
 
@@ -128,94 +134,94 @@ public:
    * The file is opened on construction and will be closed by the
    * destructor.
    */
-  netCDFLFRicFile(const char* fileName);
-  ~netCDFLFRicFile();
+  NETCDFLFRICFILE_EXPORT netCDFLFRicFile(const char* fileName);
+  NETCDFLFRICFILE_EXPORT ~netCDFLFRicFile();
 
   /**
    * Check if the class constructor managed to open the netCDF file.
    */
-  bool IsFileOpen();
+  NETCDFLFRICFILE_EXPORT bool IsFileOpen();
 
   /**
    * Return name of the netCDF file.
    */
-  const char* GetFileName();
+  NETCDFLFRICFILE_EXPORT const char* GetFileName();
 
   /**
    * Check if netCDF dimension dimName exists.
    */
-  bool HasDim(const std::string& dimName);
+  NETCDFLFRICFILE_EXPORT bool HasDim(const std::string& dimName);
 
   /**
    * Return length of netCDF dimension with ID dimId.
    */
-  size_t GetDimLen(const int dimId);
+  NETCDFLFRICFILE_EXPORT size_t GetDimLen(const int dimId);
 
   /**
    * Return netCDF dimension ID for dimension dimName.
    */
-  int GetDimId(const std::string& dimName);
+  NETCDFLFRICFILE_EXPORT int GetDimId(const std::string& dimName);
 
   /**
    * Return netCDF dimension name for ID dimId.
    */
-  std::string GetDimName(const int dimId);
+  NETCDFLFRICFILE_EXPORT std::string GetDimName(const int dimId);
 
   /**
    * Return netCDF variable ID for variable varName.
    */
-  int GetVarId(const std::string& varName);
+  NETCDFLFRICFILE_EXPORT int GetVarId(const std::string& varName);
 
   /**
    * Return netCDF variable name for ID varID.
    */
-  std::string GetVarName(const int varId);
+  NETCDFLFRICFILE_EXPORT std::string GetVarName(const int varId);
 
   /**
    * Return the number of dimensions for netCDF variable with ID varId.
    */
-  size_t GetVarNumDims(const int varId);
+  NETCDFLFRICFILE_EXPORT size_t GetVarNumDims(const int varId);
 
   /**
    * Return ID of the dimth dimension of netCDF variable with ID varId.
    */
-  int GetVarDimId(const int varId, const size_t dim);
+  NETCDFLFRICFILE_EXPORT int GetVarDimId(const int varId, const size_t dim);
 
   /**
    * Return integer attribute attName of netCDF variable with ID varId.
    */
-  int GetAttInt(const int varId, const std::string& attName);
+  NETCDFLFRICFILE_EXPORT int GetAttInt(const int varId, const std::string& attName);
 
   ///@{
   /**
    * Return string attribute attName of netCDF variable with ID varId
    * or name varName.
    */
-  std::string GetAttText(const int varId, const std::string& attName);
-  std::string GetAttText(const std::string& varName, const std::string& attName);
+  NETCDFLFRICFILE_EXPORT std::string GetAttText(const int varId, const std::string& attName);
+  NETCDFLFRICFILE_EXPORT std::string GetAttText(const std::string& varName, const std::string& attName);
   ///@}
 
   /**
    * Return string attribute attName of netCDF variable with ID varId
    * split into a vector of strings.
    */
-  std::vector<std::string> GetAttTextSplit(const int varId,
-                                           const std::string& attName);
+  NETCDFLFRICFILE_EXPORT std::vector<std::string> GetAttTextSplit(const int varId,
+                                                                  const std::string& attName);
 
   /**
    * Check if netCDF variable varName exists.
    */
-  bool HasVar(const std::string& varName);
+  NETCDFLFRICFILE_EXPORT bool HasVar(const std::string& varName);
 
   /**
    * Check if netCDF variable with ID varId has attribute attName.
    */
-  bool VarHasAtt(const int varId, const std::string& attName);
+  NETCDFLFRICFILE_EXPORT bool VarHasAtt(const int varId, const std::string& attName);
 
   /**
    * Return the total number of netCDF variables in the file.
    */
-  size_t GetNumVars();
+  NETCDFLFRICFILE_EXPORT size_t GetNumVars();
 
   /**
    * Load data for double precision netCDF variable with ID varId
@@ -225,10 +231,10 @@ public:
    * @note Make sure that buffer is sufficiently larget to hold the
    * data!
    */
-  void LoadVarDouble(const int varId,
-                     const std::vector<size_t>& start,
-                     const std::vector<size_t>& count,
-                     double* buffer);
+  NETCDFLFRICFILE_EXPORT void LoadVarDouble(const int varId,
+                                            const std::vector<size_t>& start,
+                                            const std::vector<size_t>& count,
+                                            double* buffer);
 
   ///@{
   /**
@@ -236,27 +242,27 @@ public:
    * netCDF variable with ID varID, using vectors start and count
    * for subsetting.
    */
-  std::vector<double> GetVarDouble(const int varId,
-                                   const std::vector<size_t>& start,
-                                   const std::vector<size_t>& count);
+  NETCDFLFRICFILE_EXPORT std::vector<double> GetVarDouble(const int varId,
+                                                          const std::vector<size_t>& start,
+                                                          const std::vector<size_t>& count);
 
-  std::vector<long long> GetVarLongLong(const int varId,
-                                        const std::vector<size_t>& start,
-                                        const std::vector<size_t>& count);
+  NETCDFLFRICFILE_EXPORT std::vector<long long> GetVarLongLong(const int varId,
+                                                               const std::vector<size_t>& start,
+                                                               const std::vector<size_t>& count);
   ///@}
 
-  UGRIDMeshDescription GetMesh2DDescription();
+  NETCDFLFRICFILE_EXPORT UGRIDMeshDescription GetMesh2DDescription();
 
-  std::map<std::string, CFAxis> GetZAxisDescription(const bool isLFRicXIOSFile,
-                                                    const mesh2DTypes meshType);
+  NETCDFLFRICFILE_EXPORT std::map<std::string, CFAxis> GetZAxisDescription(const bool isLFRicXIOSFile,
+                                                                           const mesh2DTypes meshType);
 
-  CFAxis GetTAxisDescription();
+  NETCDFLFRICFILE_EXPORT CFAxis GetTAxisDescription();
 
-  void UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
-                       const std::map<std::string, CFAxis> & zAxes,
-                       const CFAxis & tAxis,
-                       std::map<std::string, DataField> & CellFields,
-                       std::map<std::string, DataField> & PointFields);
+  NETCDFLFRICFILE_EXPORT void UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
+                                              const std::map<std::string, CFAxis> & zAxes,
+                                              const CFAxis & tAxis,
+                                              std::map<std::string, DataField> & CellFields,
+                                              std::map<std::string, DataField> & PointFields);
 
 private:
 

@@ -154,6 +154,22 @@ TEST_CASE( "NetCDF Data Tests", "[data]" )
 {
   netCDFLFRicFile ncFile("testdata_single_mesh_valid.nc");
 
+  SECTION( "LoadVarDouble Returns Correct Result" )
+  {
+    const int varId = ncFile.GetVarId("var2");
+    std::vector<double> result({-1.0});
+    ncFile.LoadVarDouble(varId, {0,0}, {1,1}, result.data());
+    REQUIRE( result[0] == Approx(0.0) );
+  }
+
+  SECTION( "LoadVarDouble Does Not Modify Buffer With Incorrect Number Of Dims" )
+  {
+    const int varId = ncFile.GetVarId("var2");
+    std::vector<double> result({-1.0});
+    ncFile.LoadVarDouble(varId, {0}, {1}, result.data());
+    REQUIRE( result[0] == Approx(-1.0) );
+  }
+
   SECTION( "GetVarDouble Returns Correct Result" )
   {
     const int varId = ncFile.GetVarId("var2");
