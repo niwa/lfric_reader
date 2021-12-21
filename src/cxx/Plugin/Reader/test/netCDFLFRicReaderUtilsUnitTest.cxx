@@ -80,7 +80,7 @@ TEST_CASE( "ComputeSolidAngle Test", "[basic]" )
     REQUIRE( computeSolidAngle(lon, lat, faceNodeConnectivity, numFaces,
 			       numVertsPerFace, solidAngle, hasWrapAroundCell) );
     REQUIRE( solidAngle == Approx(0.0) );
-    REQUIRE( not hasWrapAroundCell );
+    REQUIRE( !hasWrapAroundCell );
   }
 
   SECTION( "Correct Results for Single Global Cell" )
@@ -94,10 +94,10 @@ TEST_CASE( "ComputeSolidAngle Test", "[basic]" )
     double solidAngle = -1.0;
     bool hasWrapAroundCell = true;
     
-    REQUIRE( not computeSolidAngle(lon, lat, faceNodeConnectivity, numFaces,
+    REQUIRE( !computeSolidAngle(lon, lat, faceNodeConnectivity, numFaces,
 			           numVertsPerFace, solidAngle, hasWrapAroundCell) );
     REQUIRE( solidAngle == Approx(4.0*vtkMath::Pi()) );
-    REQUIRE( not hasWrapAroundCell );
+    REQUIRE( !hasWrapAroundCell );
   }
 
   SECTION( "Correct Results for Global Model With Wrap-Around Cells" )
@@ -112,7 +112,7 @@ TEST_CASE( "ComputeSolidAngle Test", "[basic]" )
     double solidAngle = -1.0;
     bool hasWrapAroundCell = true;
     
-    REQUIRE( not computeSolidAngle(lon, lat, faceNodeConnectivity, numFaces,
+    REQUIRE( !computeSolidAngle(lon, lat, faceNodeConnectivity, numFaces,
 			           numVertsPerFace, solidAngle, hasWrapAroundCell) );
 
     // Compute gap left by the wrap-around cell

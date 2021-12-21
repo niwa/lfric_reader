@@ -4,8 +4,13 @@
 #include <vtkMath.h>
 #include <vtkAssume.h>
 #include <vtkDataArrayAccessor.h>
-
 #include <vector>
+
+// MSVC compiler requires explicit symbol import/export for DLLs
+// Use mechanism provided by VTK/ParaView build system to handle
+// this automatically
+#include "vtkNetCDFLFRicReaderModule.h"
+#define LFRICREADERUTILS_EXPORT VTKNETCDFLFRICREADER_EXPORT
 
 // Functor for setting a vtkDataArray with point coordinates
 // in layer-first ordering
@@ -79,29 +84,29 @@ private:
   const bool cartCoords;
 };
 
-void resolveLongitudeGap(std::vector<double> & nodeCoordsLon,
-                         const double lonMin,
-                         const double lonMax,
-                         const double lonGapSizeThreshold);
+LFRICREADERUTILS_EXPORT void resolveLongitudeGap(std::vector<double> & nodeCoordsLon,
+                                                 const double lonMin,
+                                                 const double lonMax,
+                                                 const double lonGapSizeThreshold);
 
-int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
-                      const std::vector<double> & nodeCoordsLat,
-                      const std::vector<long long> & faceNodeConnectivity,
-                      const size_t numFaces,
-                      const size_t numVertsPerFace,
-                      double & solidAngle,
-                      bool & hasWrapAroundCells);
+LFRICREADERUTILS_EXPORT int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
+                                              const std::vector<double> & nodeCoordsLat,
+                                              const std::vector<long long> & faceNodeConnectivity,
+                                              const size_t numFaces,
+                                              const size_t numVertsPerFace,
+                                              double & solidAngle,
+                                              bool & hasWrapAroundCells);
 
-void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
-                         std::vector<double> & nodeCoordsY,
-                         std::vector<long long> & faceNodeConnectivity,
-                         const size_t numFaces,
-                         const size_t numVertsPerFace,
-                         const bool globalModel,
-                         const double latMin,
-                         const double latMax,
-                         const double lonMin,
-                         const double lonMax);
+LFRICREADERUTILS_EXPORT void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
+                                                 std::vector<double> & nodeCoordsY,
+                                                 std::vector<long long> & faceNodeConnectivity,
+                                                 const size_t numFaces,
+                                                 const size_t numVertsPerFace,
+                                                 const bool globalModel,
+                                                 const double latMin,
+                                                 const double latMax,
+                                                 const double lonMin,
+                                                 const double lonMax);
 
 void prepareGrid(std::vector<double> & nodeCoordsX,
                  std::vector<double> & nodeCoordsY,

@@ -10,19 +10,19 @@
 #ifndef vtkNetCDFLFRicReader_h
 #define vtkNetCDFLFRicReader_h
 
-#include "netCDFLFRicFile.h"
-
-#include <vtkIONetCDFModule.h> // For export macro
+#include "vtkNetCDFLFRicReaderModule.h" // For export macro
 #include <vtkUnstructuredGridAlgorithm.h>
 #include <vtkUnstructuredGrid.h>
 #include <vtkSmartPointer.h>
 #include <vtk_netcdf.h>
 
+#include "netCDFLFRicFile.h"
+
 #include <vector>
 #include <map>
 #include <string>
 
-class VTKIONETCDF_EXPORT vtkNetCDFLFRicReader : public vtkUnstructuredGridAlgorithm
+class VTKNETCDFLFRICREADER_EXPORT vtkNetCDFLFRicReader : public vtkUnstructuredGridAlgorithm
 {
 
 public:

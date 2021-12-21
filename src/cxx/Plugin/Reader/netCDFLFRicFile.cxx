@@ -285,7 +285,7 @@ void netCDFLFRicFile::LoadVarDouble(const int varId,
 {
   // Check if number of dimensions matches netCDF variable
   const size_t numDims = this->GetVarNumDims(varId);
-  if (numDims != start.size() or numDims != count.size())
+  if (numDims != start.size() || numDims != count.size())
   {
     std::cerr << "netCDFLFRicFile::LoadVarDouble: number of dimensions does not match netCDF variable.\n";
   }
@@ -318,7 +318,7 @@ std::vector<double> netCDFLFRicFile::GetVarDouble(
 
   // Check if number of dimensions matches netCDF variable
   const size_t numDims = this->GetVarNumDims(varId);
-  if (numDims != start.size() or numDims != count.size())
+  if (numDims != start.size() || numDims != count.size())
   {
     std::cerr << "netCDFLFRicFile::GetVarDouble: number of dimensions does not match netCDF variable.\n";
     std::fill(varData.begin(), varData.end(), std::numeric_limits<double>::quiet_NaN());
@@ -352,7 +352,7 @@ std::vector<long long> netCDFLFRicFile::GetVarLongLong(
 
   // Check if number of dimensions matches netCDF variable
   const size_t numDims = this->GetVarNumDims(varId);
-  if (numDims != start.size() or numDims != count.size())
+  if (numDims != start.size() || numDims != count.size())
   {
     std::cerr << "netCDFLFRicFile::GetVarLongLong: number of dimensions does not match netCDF variable.\n";
     std::fill(varData.begin(), varData.end(), 0);
@@ -394,9 +394,9 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
         // Mesh descriptions in LFRic output files start with "Mesh2d"
         // and can be separate, or partially or fully unified
         // topology_dimension=2 means faces
-        if ((varName == "Mesh2d_full_levels" or
-             varName == "Mesh2d_face" or
-             (varName == "Mesh2d" and this->HasDim("full_levels"))) and
+        if ((varName == "Mesh2d_full_levels" ||
+             varName == "Mesh2d_face" ||
+             (varName == "Mesh2d" && this->HasDim("full_levels"))) &&
             this->GetAttInt(varId, "topology_dimension") == 2)
         {
           mesh2D.meshTopologyVarId = varId;
@@ -405,8 +405,8 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
         }
         // LFRic output files can come with separate edge mesh, still has
         // topology_dimension=2
-        else if ((varName == "Mesh2d_edge_half_levels" or
-                  varName == "Mesh2d_edge") and
+        else if ((varName == "Mesh2d_edge_half_levels" ||
+                  varName == "Mesh2d_edge") &&
                  this->GetAttInt(varId, "topology_dimension") == 2)
         {
           hasHalfLevelEdgeMesh = true;
@@ -414,7 +414,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
         }
         // Assume that mesh is half-level type otherwise (2D faces represent 3D volumes)
         // Adopt first mesh description
-        else if (mesh2D.meshTopologyVarId < 0 and
+        else if (mesh2D.meshTopologyVarId < 0 &&
                  this->GetAttInt(varId, "topology_dimension") == 2)
         {
           mesh2D.meshTopologyVarId = varId;
@@ -426,7 +426,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   }
 
   // Must have at least one face mesh
-  if (mesh2D.meshTopologyVarId < 0 or mesh2D.numTopologies == 0)
+  if (mesh2D.meshTopologyVarId < 0 || mesh2D.numTopologies == 0)
   {
     std::cerr << "GetMesh2DDescription: At least one UGRID face mesh is required.\n";
     return UGRIDMeshDescription();
@@ -434,14 +434,14 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
   // Require that a multi-mesh file is an LFRic file - the current implementation
   // only supports a single UGRID mesh per file otherwise
-  if (not mesh2D.isLFRicXIOSFile and mesh2D.numTopologies > 1)
+  if (!mesh2D.isLFRicXIOSFile && mesh2D.numTopologies > 1)
   {
     std::cerr << "GetMesh2DDescription: Only LFRic output files can have multiple UGRID meshes.\n";
     return UGRIDMeshDescription();
   }
 
   // Accept up to 3 meshes in an LFRic file
-  if (mesh2D.isLFRicXIOSFile and mesh2D.numTopologies > 3)
+  if (mesh2D.isLFRicXIOSFile && mesh2D.numTopologies > 3)
   {
     std::cerr << "GetMesh2DDescription: LFRic output files can only have up to 3 UGRID meshes.\n";
     return UGRIDMeshDescription();
@@ -451,7 +451,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   // Get node coordinate variables and their dimensions
   //
 
-  if (not this->VarHasAtt(mesh2D.meshTopologyVarId, "node_coordinates"))
+  if (!this->VarHasAtt(mesh2D.meshTopologyVarId, "node_coordinates"))
   {
     std::cerr << "GetMesh2DDescription: UGRID topology variable must have node_coordinates attribute.\n";
     return UGRIDMeshDescription();
@@ -468,15 +468,15 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   }
 
   // Longitude must be the "x axis" to detect cubed-sphere grids
-  if (this->GetAttText(nodeCoordVarNames[0], "standard_name") == "latitude" or
+  if (this->GetAttText(nodeCoordVarNames[0], "standard_name") == "latitude" ||
       this->GetAttText(nodeCoordVarNames[0], "standard_name") == "projection_y_coordinate")
   {
     nodeCoordVarNames[0].swap(nodeCoordVarNames[1]);
   }
 
-  if ((this->GetAttText(nodeCoordVarNames[0], "standard_name") != "longitude" and
-       this->GetAttText(nodeCoordVarNames[0], "standard_name") != "projection_x_coordinate") or
-      (this->GetAttText(nodeCoordVarNames[1], "standard_name") != "latitude" and
+  if ((this->GetAttText(nodeCoordVarNames[0], "standard_name") != "longitude" &&
+       this->GetAttText(nodeCoordVarNames[0], "standard_name") != "projection_x_coordinate") ||
+      (this->GetAttText(nodeCoordVarNames[1], "standard_name") != "latitude" &&
        this->GetAttText(nodeCoordVarNames[1], "standard_name") != "projection_y_coordinate"))
   {
     std::cerr << "GetMesh2DDescription: Node coord variables must be named latitude/longitude " <<
@@ -501,7 +501,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   // Get face-node connectivity variable and its dimensions
   //
 
-  if (not this->VarHasAtt(mesh2D.meshTopologyVarId, "face_node_connectivity"))
+  if (!this->VarHasAtt(mesh2D.meshTopologyVarId, "face_node_connectivity"))
   {
     std::cerr << "GetMesh2DDescription: UGRID topology variable must have face_node_connectivity attribute.\n";
     return UGRIDMeshDescription();
@@ -540,7 +540,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
 
   // Alternative face dimension ID for old LFRic output files, required
   // for identifying field variables
-  if (mesh2D.isLFRicXIOSFile and this->HasDim("nMesh2d_half_levels_face"))
+  if (mesh2D.isLFRicXIOSFile && this->HasDim("nMesh2d_half_levels_face"))
   {
     mesh2D.faceDimIdAlt = this->GetDimId("nMesh2d_half_levels_face");
   }
@@ -549,13 +549,13 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
   // Get edge coordinate variables and their dimensions (if available)
   //
 
-  if (hasHalfLevelEdgeMesh or this->VarHasAtt(mesh2D.meshTopologyVarId, "face_edge_connectivity"))
+  if (hasHalfLevelEdgeMesh || this->VarHasAtt(mesh2D.meshTopologyVarId, "face_edge_connectivity"))
   {
     // Prioritise half-level edge mesh if it exists - the face mesh may have face-edge connectivity, too,
     // but it will not be useable for edge-centered data if the meshes are not unified in LFRic output
     const int lookupMeshTopologyVarId = hasHalfLevelEdgeMesh ? meshTopologyVarEdgeId : mesh2D.meshTopologyVarId;
 
-    if (not this->VarHasAtt(lookupMeshTopologyVarId, "edge_coordinates"))
+    if (!this->VarHasAtt(lookupMeshTopologyVarId, "edge_coordinates"))
     {
       std::cerr << "GetMesh2DDescription: UGRID edge topology variable must have edge_coordinates attribute.\n";
       return UGRIDMeshDescription();
@@ -577,9 +577,9 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
       edgeCoordVarNames[0].swap(edgeCoordVarNames[1]);
     }
 
-  if ((this->GetAttText(edgeCoordVarNames[0], "standard_name") != "longitude" and
-       this->GetAttText(edgeCoordVarNames[0], "standard_name") != "projection_x_coordinate") or
-      (this->GetAttText(edgeCoordVarNames[1], "standard_name") != "latitude" and
+  if ((this->GetAttText(edgeCoordVarNames[0], "standard_name") != "longitude" &&
+       this->GetAttText(edgeCoordVarNames[0], "standard_name") != "projection_x_coordinate") ||
+      (this->GetAttText(edgeCoordVarNames[1], "standard_name") != "latitude" &&
        this->GetAttText(edgeCoordVarNames[1], "standard_name") != "projection_y_coordinate"))
     {
       std::cerr << "GetMesh2DDescription: Edge coord variables must be named latitude/longitude " <<
@@ -595,7 +595,7 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
     mesh2D.numEdges = this->GetDimLen(mesh2D.edgeDimId);
 
     // Get face-edge connectivity if the mesh is unified
-    if (not hasHalfLevelEdgeMesh)
+    if (!hasHalfLevelEdgeMesh)
     {
       const std::string faceEdgeConnVar = this->GetAttText(mesh2D.meshTopologyVarId,
                                                            "face_edge_connectivity");
@@ -634,7 +634,7 @@ std::map<std::string, CFAxis> netCDFLFRicFile::GetZAxisDescription(const bool is
   // "half_levels" (cell mid-levels). We need to store these axes for accessing the data,
   // and create a third axis ("vtk") that counts the number vertical levels, for creating
   // the VTK grid.
-  if (isLFRicXIOSFile and (meshType == fullLevelFaceMesh or meshType == halfLevelFaceMesh))
+  if (isLFRicXIOSFile && (meshType == fullLevelFaceMesh || meshType == halfLevelFaceMesh))
   {
     if (this->HasVar("full_levels"))
     {
@@ -674,8 +674,8 @@ std::map<std::string, CFAxis> netCDFLFRicFile::GetZAxisDescription(const bool is
       {
         // Prefer to use level_height variable if it exists
         const std::string varName = this->GetVarName(varId);
-	if (varName == "level_height" or
-            (levels.axisVarId < 0 and varName == "model_level_number"))
+	if (varName == "level_height" ||
+            (levels.axisVarId < 0 && varName == "model_level_number"))
         {
           levels.axisVarId = varId;
           levels.axisDimId = this->GetVarDimId(levels.axisVarId, 0);
@@ -746,10 +746,10 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
 
     // Require these CF-netCDF attributes to distinguish fields from UGRID
     // variables and other data
-    bool valid = (this->VarHasAtt(varId, "standard_name") or
-                  this->VarHasAtt(varId, "long_name")) and
-                  this->VarHasAtt(varId, "mesh") and
-                  this->VarHasAtt(varId, "coordinates") and
+    bool valid = (this->VarHasAtt(varId, "standard_name") ||
+                  this->VarHasAtt(varId, "long_name")) &&
+                  this->VarHasAtt(varId, "mesh") &&
+                  this->VarHasAtt(varId, "coordinates") &&
                   this->VarHasAtt(varId, "location");
 
     // Identify and record variable dimensions, and add field to map if all
@@ -788,7 +788,7 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
           debugMacro("Found horizontal edge dim\n");
         }
         // Older LFRic files can have two different face meshes
-        else if (thisDimId == mesh2D.faceDimId or thisDimId == mesh2D.faceDimIdAlt)
+        else if (thisDimId == mesh2D.faceDimId || thisDimId == mesh2D.faceDimIdAlt)
         {
           fieldSpec.hasHorizontalDim = true;
           // Assume half-level faces for now, if meshType has not been determined yet
@@ -797,7 +797,7 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
           isIdentified = true;
           debugMacro("Found horizontal face dim\n");
         }
-        else if (thisDimId == fullLevelsDimId or thisDimId == halfLevelsDimId)
+        else if (thisDimId == fullLevelsDimId || thisDimId == halfLevelsDimId)
         {
           fieldSpec.hasVerticalDim = true;
           // Only face-type fields can be defined at full level (cell interfaces)
@@ -815,7 +815,7 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
         }
         // If dimension is not known, assume it is a component dimension if it
         // has up to 9 components and no other component dimension has been set
-        else if (this->GetDimLen(thisDimId) < 10 and not fieldSpec.hasComponentDim)
+        else if (this->GetDimLen(thisDimId) < 10 && !fieldSpec.hasComponentDim)
         {
           fieldSpec.hasComponentDim = true;
           fieldSpec.dims[iDim].dimType = componentAxisDim;
@@ -867,7 +867,7 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
         }
         // Make all fields available as cell data
         // W2 fields require face-edge connectivity data
-        if (fieldSpec.meshType != halfLevelEdgeMesh or mesh2D.faceEdgeConnVarId > -1)
+        if (fieldSpec.meshType != halfLevelEdgeMesh || mesh2D.faceEdgeConnVarId > -1)
         {
           fieldSpec.location = cellFieldLoc;
           std::map<std::string, DataField>::const_iterator it = CellFields.find(varName);
