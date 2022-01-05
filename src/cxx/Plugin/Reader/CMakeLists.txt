@@ -11,7 +11,7 @@ set(smsrcs vtkNetCDFLFRicReader.cxx)
 set(srcs netCDFLFRicFile.cxx netCDFLFRicReaderUtils.cxx)
 set(hdrs vtkNetCDFLFRicReader.h netCDFLFRicFile.h netCDFLFRicReaderUtils.h)
 
-if (ParaView_VERSION GREATER_EQUAL 5.7)
+if (ParaView_VERSION VERSION_GREATER_EQUAL 5.7)
 
   # New way of building plugins - tell CMake to build VTK module
   vtk_module_add_module(vtkNetCDFLFRicReader

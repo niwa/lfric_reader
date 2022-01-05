@@ -10,7 +10,7 @@ add_executable (netCDFLFRicReader_tests ${Test_SRCS})
 # Include auto-generated header file for DLL symbol import/export when compiling with MSVC
 target_include_directories(netCDFLFRicReader_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_BINARY_DIR}/..)
 
-if (ParaView_VERSION GREATER_EQUAL 5.7)
+if (ParaView_VERSION VERSION_GREATER_EQUAL 5.7)
 
   # New build system creates module libraries which cannot be linked,
   # need to build additional shared library for testing

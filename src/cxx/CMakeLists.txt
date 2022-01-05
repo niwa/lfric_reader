@@ -12,7 +12,7 @@ include(CTest)
 # Locate ParaView build and import CMake config, macros etc.
 FIND_PACKAGE(ParaView REQUIRED)
 
-if (ParaView_VERSION GREATER_EQUAL 5.7)
+if (ParaView_VERSION VERSION_GREATER_EQUAL 5.7)
 
   # New build system
   include(GNUInstallDirs)
