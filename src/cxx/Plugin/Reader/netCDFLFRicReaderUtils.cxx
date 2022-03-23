@@ -99,8 +99,9 @@ int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
   }
 
   // Traverse grid and compute total solid angle of the horizontal domain on the sphere
-  double lon[numVertsPerFace];
-  double lat[numVertsPerFace];
+  // Need to use constant array length here for C++ standard compliance
+  double lon[4];
+  double lat[4];
   const double deg2rad = vtkMath::Pi()/180.0;
   for (size_t iFace = 0; iFace < numFaces; iFace++)
   {
