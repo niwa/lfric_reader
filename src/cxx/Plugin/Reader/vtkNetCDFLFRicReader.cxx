@@ -334,7 +334,7 @@ int vtkNetCDFLFRicReader::RequestData(vtkInformation *vtkNotUsed(request),
     }
   }
   // VTK points only for W2 visualisation
-  else if (this->OutputMode == 1 && this->mesh2D.edgeDimId >= 0)
+  else if (this->OutputMode == 1 && this->mesh2D.edgeCoordXVarId >= 0)
   {
     if (!this->CreateVTKPoints(inputFile, outputGrid,
                                static_cast<size_t>(startLevel),

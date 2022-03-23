@@ -100,9 +100,9 @@ TEST_CASE( "ComputeSolidAngle Test", "[basic]" )
     REQUIRE( !hasWrapAroundCell );
   }
 
-  SECTION( "Correct Results for Global Model With Wrap-Around Cells" )
+  SECTION( "Correct Results for Global Mesh With Wrap-Around Cells" )
   {
-    // Construct a "global model" with a smaller wrap-around cell
+    // Construct a "global mesh" with a smaller wrap-around cell
     const std::vector<double> lon({-180.0,-90.0,  0.0, 90.0,175.0,-180.0,-90.0, 0.0,90.0,175.0});
     const std::vector<double> lat({ -90.0,-90.0,-90.0,-90.0,-90.0,  90.0, 90.0,90.0,90.0, 90.0});
     const std::vector<long long> faceNodeConnectivity({0,1,6,5,1,2,7,6,2,3,8,7,3,4,9,8,4,5,0,9});
@@ -120,6 +120,64 @@ TEST_CASE( "ComputeSolidAngle Test", "[basic]" )
     const double gap = (sin(90.0*deg2rad)-sin(-90.0*deg2rad))*((180.0-175.0)*deg2rad);
     REQUIRE( solidAngle == Approx(4.0*vtkMath::Pi()-gap) );
     REQUIRE( hasWrapAroundCell );
+  }
+}
+
+// ------------------------------------------------------------------------------------------
+
+TEST_CASE( "ComputeEdgeLength Test", "[basic]" )
+{
+  SECTION( "Fails For Triangular Cells" )
+  {
+    const std::vector<double> lon({0.0,1.0,0.0});
+    const std::vector<double> lat({0.0,0.0,1.0});
+    const std::vector<long long> faceNodeConnectivity({0,1,2});
+    const size_t numFaces = 1;
+    const size_t numVertsPerFace = 3;
+
+    double edgeLengthX = -7.0;
+    double edgeLengthY = 5.0;
+
+    REQUIRE( computeEdgeLength(lon, lat, faceNodeConnectivity, numFaces,
+			       numVertsPerFace, edgeLengthX, edgeLengthY) );
+    REQUIRE( edgeLengthX == Approx(0.0) );
+    REQUIRE( edgeLengthY == Approx(0.0) );
+  }
+
+  SECTION( "Correct Results for Single Cell" )
+  {
+    const std::vector<double> lon({-0.5, 0.5,0.5,-0.5});
+    const std::vector<double> lat({-1.0,-1.0,1.0, 1.0});
+    const std::vector<long long> faceNodeConnectivity({0,1,3,2});
+    const size_t numFaces = 1;
+    const size_t numVertsPerFace = 4;
+
+    double edgeLengthX = -7.0;
+    double edgeLengthY = 5.0;
+    
+    REQUIRE( !computeEdgeLength(lon, lat, faceNodeConnectivity, numFaces,
+			        numVertsPerFace, edgeLengthX, edgeLengthY) );
+    REQUIRE( edgeLengthX == Approx(1.0) );
+    REQUIRE( edgeLengthY == Approx(2.0) );
+  }
+
+  SECTION( "Correct Results for Grid With Wrap-Around Cells" )
+  {
+    // Construct a "global model" with a smaller wrap-around cell
+    const std::vector<double> lon({-1.0, 1.0,1.0,-1.0});
+    const std::vector<double> lat({-0.5,-0.5,0.5, 0.5});
+    const std::vector<long long> faceNodeConnectivity({0,1,3,2,3,2,1,0});
+    const size_t numFaces = 2;
+    const size_t numVertsPerFace = 4;
+
+    double edgeLengthX = -7.0;
+    double edgeLengthY = 5.0;
+    
+    REQUIRE( !computeEdgeLength(lon, lat, faceNodeConnectivity, numFaces,
+			        numVertsPerFace, edgeLengthX, edgeLengthY) );
+
+    REQUIRE( edgeLengthX == Approx(2.0) );
+    REQUIRE( edgeLengthY == Approx(1.0) );
   }
 }
 
@@ -180,9 +238,9 @@ TEST_CASE( "ResolvePeriodicGrid Test", "[basic]" )
     REQUIRE( lat.size() == latOriginal.size()+2 );
     REQUIRE( faceNode.size() == faceNodeOriginal.size() );
 
-    // Add mirrored points - for a planar grid, these coincide with the points with
-    // highest longitude - and edit connectivity accordingly
-    lonOriginal.insert(lonOriginal.end(), 2, 3.0);
+    // Add mirrored points - for a planar grid, these are spaced with the average edge length -
+    // and edit connectivity accordingly
+    lonOriginal.insert(lonOriginal.end(), 2, 4.0);
     latOriginal.insert(latOriginal.end(), 0.0);
     latOriginal.insert(latOriginal.end(), 1.0);
     faceNodeOriginal.at(13) = 16;
@@ -211,7 +269,7 @@ TEST_CASE( "ResolvePeriodicGrid Test", "[basic]" )
     // Add mirrored points and edit connectivity accordingly
     lonOriginal.insert(lonOriginal.end(), 1.0);
     lonOriginal.insert(lonOriginal.end(), 0.0);
-    latOriginal.insert(latOriginal.end(), 2, 3.0);
+    latOriginal.insert(latOriginal.end(), 2, 4.0);
     faceNodeOriginal.at(2) = 16;
     faceNodeOriginal.at(3) = 17;
 
@@ -236,8 +294,10 @@ TEST_CASE( "ResolvePeriodicGrid Test", "[basic]" )
     REQUIRE( faceNode.size() == faceNodeOriginal.size() );
 
     // Add mirrored points and edit connectivity accordingly
-    lonOriginal.insert(lonOriginal.end(), 3, 3.0);
-    latOriginal.insert(latOriginal.end(), 3, 3.0);
+    lonOriginal.insert(lonOriginal.end(), 2, 4.0);
+    lonOriginal.insert(lonOriginal.end(), 3.0);
+    latOriginal.insert(latOriginal.end(), 3.0);
+    latOriginal.insert(latOriginal.end(), 2, 4.0);
     faceNodeOriginal.at(37) = 16;
     faceNodeOriginal.at(38) = 17;
     faceNodeOriginal.at(39) = 18;
