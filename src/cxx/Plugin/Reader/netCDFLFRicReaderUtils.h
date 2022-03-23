@@ -97,6 +97,14 @@ LFRICREADERUTILS_EXPORT int computeSolidAngle(const std::vector<double> & nodeCo
                                               double & solidAngle,
                                               bool & hasWrapAroundCells);
 
+LFRICREADERUTILS_EXPORT int computeEdgeLength(const std::vector<double> & nodeCoordsX,
+                                              const std::vector<double> & nodeCoordsY,
+                                              const std::vector<long long> & faceNodeConnectivity,
+                                              const size_t numFaces,
+                                              const size_t numVertsPerFace,
+                                              double & edgeLengthX,
+                                              double & edgeLengthY);
+
 LFRICREADERUTILS_EXPORT void resolvePeriodicGrid(std::vector<double> & nodeCoordsX,
                                                  std::vector<double> & nodeCoordsY,
                                                  std::vector<long long> & faceNodeConnectivity,

@@ -77,7 +77,9 @@ void resolveLongitudeGap(std::vector<double> & nodeCoordsLon, const double lonMi
   }
 }
 
-// Computing total solid angle covered by the mesh, excluding wrap-around cells
+//----------------------------------------------------------------------------
+
+// Compute total solid angle covered by the mesh, excluding wrap-around cells
 int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
                       const std::vector<double> & nodeCoordsLat,
                       const std::vector<long long> & faceNodeConnectivity,
@@ -97,8 +99,8 @@ int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
   }
 
   // Traverse grid and compute total solid angle of the horizontal domain on the sphere
-  double lon[4];
-  double lat[4];
+  double lon[numVertsPerFace];
+  double lat[numVertsPerFace];
   const double deg2rad = vtkMath::Pi()/180.0;
   for (size_t iFace = 0; iFace < numFaces; iFace++)
   {
@@ -113,12 +115,14 @@ int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
     }
 
     // Compute solid angle of cell on the sphere using the cross-product of cell
-    // diagonal vectors using coordinates mu=sin(lat), nu=lon/pi
+    // diagonal vectors in coordinates mu=sin(lat), nu=lon/pi
     const double cellSolidAngle = 0.5*((lon[2]-lon[0])*(sin(lat[3])-sin(lat[1])) - \
                                        (lon[3]-lon[1])*(sin(lat[2])-sin(lat[0])));
 
     // Cells that wrap around at a periodic boundary will have negative solid angle;
-    // ignore these in the calculation
+    // ignore these in the calculation. Note that this criterion will probably not work for
+    // corner cells of biperiodic meshes, but these currently only occur as planar meshes,
+    // for which this algorithm is not used.
     if (cellSolidAngle > 0.0)
     {
       solidAngle += cellSolidAngle;
@@ -130,14 +134,63 @@ int computeSolidAngle(const std::vector<double> & nodeCoordsLon,
   }
 
   debugMacro("computeSolidAngle: Mesh covers a total solid angle of " << solidAngle << endl);
-  if (hasWrapAroundCells)
+
+  return 0;
+}
+
+//----------------------------------------------------------------------------
+
+// Compute x and y edge lengths for wrap-around cells in rectangular periodic grids
+int computeEdgeLength(const std::vector<double> & nodeCoordsX,
+                      const std::vector<double> & nodeCoordsY,
+                      const std::vector<long long> & faceNodeConnectivity,
+                      const size_t numFaces,
+                      const size_t numVertsPerFace,
+                      double & edgeLengthX,
+                      double & edgeLengthY)
+{
+  edgeLengthX = 0.0;
+  edgeLengthY = 0.0;
+
+  if (numVertsPerFace != 4)
   {
-    debugMacro("computeSolidAngle: Mesh covers a total solid angle of " << solidAngle << endl);
+    errorMacro("computeEdgeLength: ERROR: Only quadrilateral cells are currently " <<
+               "supported in the horizontal domain." << endl);
+    return 1;
   }
-  else
+
+  // Traverse grid and compute average cell edge lengths
+  size_t countX = 0;
+  size_t countY = 0;
+  for (size_t iFace = 0; iFace < numFaces; iFace++)
   {
-    debugMacro("computeSolidAngle: Mesh covers a total solid angle of " << solidAngle << endl);
+    const size_t faceBaseIdx = iFace*numVertsPerFace;
+    const long long nodeId0 = faceNodeConnectivity[faceBaseIdx];
+    const long long nodeId1 = faceNodeConnectivity[faceBaseIdx + 1];
+    const long long nodeId2 = faceNodeConnectivity[faceBaseIdx + 2];
+
+    const double deltaX = nodeCoordsX[nodeId1]-nodeCoordsX[nodeId0];
+    const double deltaY = nodeCoordsY[nodeId2]-nodeCoordsY[nodeId1];
+
+    // Only count edges that do not wrap around, assuming rectangular cells
+    if (deltaX > 0)
+    {
+      edgeLengthX += deltaX;
+      countX++;
+    }
+    if (deltaY > 0)
+    {
+      edgeLengthY += deltaY;
+      countY++;
+    }
   }
+
+  edgeLengthX /= static_cast<double>(countX);
+  edgeLengthY /= static_cast<double>(countY);
+
+  debugMacro("computeEdgeLength: Determined average edge lengths edgeLengthX=" << edgeLengthX <<
+             " edgeLengthY=" << edgeLengthY << endl);
+
   return 0;
 }
 
@@ -169,9 +222,17 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
       lonOffset = 0.0;
       latOffset = 0.0;
       cellThreshold = 0.6;
-      mirrorFromWest = false;
+      // Find out on which side the dateline vertices are in the mesh, assuming centred mesh
+      if (lonMax >= -lonMin)
+      {
+        mirrorFromWest = false;
+      }
+      else
+      {
+        mirrorFromWest = true;
+      }
       debugMacro("resolvePeriodicGrid: Assuming cubed-sphere grid with -180..180 lon range, setting lonOffset=" <<
-                 lonOffset << " latOffset=" << latOffset << endl);
+                 lonOffset << " latOffset=" << latOffset << "; dateline vertices in the West=" << mirrorFromWest << endl);
     }
     else if (lonMin >= 0.0 && lonMax <= 360.0)
     {
@@ -191,8 +252,19 @@ void resolvePeriodicGrid(std::vector<double> & nodeCoordsLon,
   }
   else
   {
-    lonOffset = 0.5*(lonMin + lonMax);
-    latOffset = 0.5*(latMin + latMax);
+    // Determine edge lengths for wrap-around cells
+    double edgeLengthLon = 0.0;
+    double edgeLengthLat = 0.0;
+    if (computeEdgeLength(nodeCoordsLon, nodeCoordsLat, faceNodeConnectivity,
+                          numFaces, numVertsPerFace, edgeLengthLon, edgeLengthLat))
+    {
+      errorMacro("resolvePeriodicGrid: ERROR: computeEdgeLength returned error" << endl);
+      return;
+    }
+
+    // Find center point, shifted by edge length
+    lonOffset = 0.5*(lonMin + lonMax + edgeLengthLon);
+    latOffset = 0.5*(latMin + latMax + edgeLengthLat);
     cellThreshold = 0.5;
     mirrorFromWest = true;
     debugMacro("Detected LAM grid, setting lonOffset=" <<
@@ -383,6 +455,10 @@ void prepareGrid(std::vector<double> & nodeCoordsX,
   {
     debugMacro("prepareGrid: Assuming mesh is LAM." << endl);
   }
+
+  //
+  // Resolve grid periodicity as needed
+  //
 
   // computeSolidAngle scans for wrap-around cells, but is only executed when isPlanarLAM == false
   if (hasWrapAroundCells || isPlanarLAM)

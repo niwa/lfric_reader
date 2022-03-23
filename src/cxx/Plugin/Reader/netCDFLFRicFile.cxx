@@ -555,44 +555,56 @@ UGRIDMeshDescription netCDFLFRicFile::GetMesh2DDescription()
     // but it will not be useable for edge-centered data if the meshes are not unified in LFRic output
     const int lookupMeshTopologyVarId = hasHalfLevelEdgeMesh ? meshTopologyVarEdgeId : mesh2D.meshTopologyVarId;
 
-    if (!this->VarHasAtt(lookupMeshTopologyVarId, "edge_coordinates"))
+    if (this->VarHasAtt(lookupMeshTopologyVarId, "edge_coordinates"))
     {
-      std::cerr << "GetMesh2DDescription: UGRID edge topology variable must have edge_coordinates attribute.\n";
+
+      std::vector<std::string> edgeCoordVarNames =
+        this->GetAttTextSplit(lookupMeshTopologyVarId, "edge_coordinates");
+
+      if (edgeCoordVarNames.size() != 2)
+      {
+        std::cerr << "GetMesh2DDescription: Expected 2 edge coordinate variables but received " <<
+                     edgeCoordVarNames.size() << ".\n";
+        return UGRIDMeshDescription();
+      }
+
+      // Longitude must be the "x axis" for consistency with face mesh
+      if (this->GetAttText(edgeCoordVarNames[0], "standard_name") == "latitude")
+      {
+        edgeCoordVarNames[0].swap(edgeCoordVarNames[1]);
+      }
+
+      if ((this->GetAttText(edgeCoordVarNames[0], "standard_name") != "longitude" &&
+           this->GetAttText(edgeCoordVarNames[0], "standard_name") != "projection_x_coordinate") ||
+          (this->GetAttText(edgeCoordVarNames[1], "standard_name") != "latitude" &&
+           this->GetAttText(edgeCoordVarNames[1], "standard_name") != "projection_y_coordinate"))
+      {
+        std::cerr << "GetMesh2DDescription: Edge coord variables must be named latitude/longitude " <<
+          "or projection_x_coordinate/projection_y_coordinate.\n";
+        return UGRIDMeshDescription();
+      }
+
+      mesh2D.edgeCoordXVarId = this->GetVarId(edgeCoordVarNames[0]);
+      mesh2D.edgeCoordYVarId = this->GetVarId(edgeCoordVarNames[1]);
+
+      // Get edge dimension name and length
+      mesh2D.edgeDimId = this->GetVarDimId(mesh2D.edgeCoordXVarId, 0);
+      mesh2D.numEdges = this->GetDimLen(mesh2D.edgeDimId);
+    }
+    // Pick up edge dimension from edge-node connectivity variable otherwise, if available
+    else if (this->VarHasAtt(lookupMeshTopologyVarId, "edge_node_connectivity"))
+    {
+      const std::string edgeNodeConnVar = this->GetAttText(lookupMeshTopologyVarId,
+                                                           "edge_node_connectivity");
+      const int faceEdgeConnVarId = this->GetVarId(edgeNodeConnVar);
+      mesh2D.edgeDimId = this->GetVarDimId(faceEdgeConnVarId, 0);
+      mesh2D.numEdges = this->GetDimLen(mesh2D.edgeDimId);      
+    }
+    else
+    {
+      std::cerr << "GetMesh2DDescription: Unable to determine UGRID edge dimenion.\n";
       return UGRIDMeshDescription();
     }
-
-    std::vector<std::string> edgeCoordVarNames =
-      this->GetAttTextSplit(lookupMeshTopologyVarId, "edge_coordinates");
-
-    if (edgeCoordVarNames.size() != 2)
-    {
-      std::cerr << "GetMesh2DDescription: Expected 2 edge coordinate variables but received " <<
-                   edgeCoordVarNames.size() << ".\n";
-      return UGRIDMeshDescription();
-    }
-
-    // Longitude must be the "x axis" for consistency with face mesh
-    if (this->GetAttText(edgeCoordVarNames[0], "standard_name") == "latitude")
-    {
-      edgeCoordVarNames[0].swap(edgeCoordVarNames[1]);
-    }
-
-  if ((this->GetAttText(edgeCoordVarNames[0], "standard_name") != "longitude" &&
-       this->GetAttText(edgeCoordVarNames[0], "standard_name") != "projection_x_coordinate") ||
-      (this->GetAttText(edgeCoordVarNames[1], "standard_name") != "latitude" &&
-       this->GetAttText(edgeCoordVarNames[1], "standard_name") != "projection_y_coordinate"))
-    {
-      std::cerr << "GetMesh2DDescription: Edge coord variables must be named latitude/longitude " <<
-      "or projection_x_coordinate/projection_y_coordinate.\n";
-      return UGRIDMeshDescription();
-    }
-
-    mesh2D.edgeCoordXVarId = this->GetVarId(edgeCoordVarNames[0]);
-    mesh2D.edgeCoordYVarId = this->GetVarId(edgeCoordVarNames[1]);
-
-    // Get edge dimension name and length
-    mesh2D.edgeDimId = this->GetVarDimId(mesh2D.edgeCoordXVarId, 0);
-    mesh2D.numEdges = this->GetDimLen(mesh2D.edgeDimId);
 
     // Get face-edge connectivity if the mesh is unified
     if (!hasHalfLevelEdgeMesh)
@@ -814,8 +826,8 @@ void netCDFLFRicFile::UpdateFieldMaps(const UGRIDMeshDescription & mesh2D,
           debugMacro("Found time dim\n");
         }
         // If dimension is not known, assume it is a component dimension if it
-        // has up to 9 components and no other component dimension has been set
-        else if (this->GetDimLen(thisDimId) < 10 && !fieldSpec.hasComponentDim)
+        // has only few components and no other component dimension has been set
+        else if (this->GetDimLen(thisDimId) < 20 && !fieldSpec.hasComponentDim)
         {
           fieldSpec.hasComponentDim = true;
           fieldSpec.dims[iDim].dimType = componentAxisDim;
