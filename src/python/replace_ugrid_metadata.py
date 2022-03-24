@@ -3,6 +3,8 @@
 Python utility that replaces UGRID metadata of an LFRic netCDF file with metadata from an
 LFRic mesh file, and writes all metadata and field data to a new UGRID netCDF output file.
 """
+import sys
+import datetime as dt
 import argparse as ap
 import logging
 import netCDF4 as nc
@@ -19,7 +21,7 @@ def get_fields(nc_file):
         if all(att in dir(var) for att in ['mesh', 'units', 'location']):
             fields.append(var)
 
-    logging.info('Found %i field variables.', len(fields))
+    logging.info('Found %i field variables in file %s.', len(fields), nc_file.filepath())
 
     return fields
 
@@ -35,7 +37,7 @@ def get_vertical_axes(nc_file):
         if var_name in ('full_levels', 'half_levels'):
             vertical_axes.append(var)
 
-    logging.info('Found %i vertical axes.', len(vertical_axes))
+    logging.info('Found %i vertical axes in file %s.', len(vertical_axes), nc_file.filepath())
 
     return vertical_axes
 
@@ -48,10 +50,10 @@ def get_time_vars(nc_file):
 
     time_vars = []
     for var_name, var in nc_file.variables.items():
-        if var_name in ('time_instant', 'time_instant_bounds'):
+        if var_name in ('time', 'time_instant', 'time_instant_bounds'):
             time_vars.append(var)
 
-    logging.info('Found %i time variables.', len(time_vars))
+    logging.info('Found %i time variables in file %s.', len(time_vars), nc_file.filepath())
 
     return time_vars
 
@@ -73,7 +75,7 @@ def get_ugrid_mesh_description(nc_file):
         logging.critical('Expected 1 UGRID mesh description but found %i', len(mesh_names))
         raise RuntimeError()
 
-    logging.info('Found UGRID mesh "%s"', mesh_names[0])
+    logging.info('Found UGRID mesh "%s" in file %s', mesh_names[0], nc_file.filepath())
 
     # Extract topology dummy var from the first (and only) list element
     ugrid_topology_var = nc_file.variables[mesh_names[0]]
@@ -96,6 +98,20 @@ def get_ugrid_mesh_description(nc_file):
     return ugrid_vars
 
 
+def write_global_attrs(nc_file, global_attrs, cli_command):
+    """
+    Write global netCDF attributes and add record about UGRID metadata replacment
+    to history attribute
+    """
+
+    history_entry = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S') + ': ' + cli_command
+    if 'history' in global_attrs:
+        history_entry += '\n' + global_attrs['history']
+    global_attrs['history'] = history_entry
+
+    nc_file.setncatts(global_attrs)
+
+
 def write_ugrid_vars(nc_file, ugrid_vars, output_mesh_name):
     """
     Write UGRID dimension and variables
@@ -109,7 +125,7 @@ def write_ugrid_vars(nc_file, ugrid_vars, output_mesh_name):
     mesh_name = ugrid_vars[0].name
 
     # Generate dictionary for translating between old and new UGRID dimension names
-    ugrid_dim_translate = dict()
+    ugrid_dim_translate = {}
     for dim in ugrid_dims:
         ugrid_dim_translate[dim.name] = dim.name.replace(mesh_name, output_mesh_name)
 
@@ -139,7 +155,7 @@ def generate_edge_coords(nc_file, output_mesh_name):
     """
 
     if 'edge_coordinates' not in dir(nc_file.variables[output_mesh_name]):
-        logging.info('Generating edge coordinates...')
+        logging.info('Edge coordinates not present in mesh file, generating new set of coords...')
         # Assume XIOS UGRID naming convention
         edge_node_conn = nc_file.variables[output_mesh_name + '_edge_nodes']
         if 'start_index' in dir(edge_node_conn):
@@ -189,38 +205,53 @@ def write_field_vars(nc_file, fields, output_mesh_name):
     Write field dimensions and data
     """
 
-    # Collect dimensions from input file
+    # Collect dimensions from fields in the input file
     field_dims = set()
     for field in fields:
         field_dims.update(field.get_dims())
 
-    # Add any previously undefined dimensions - these should be field component dimensions,
+    # Collect UGRID mesh names from fields and construct dimension substitution dict
+    mesh_names = set()
+    for field in fields:
+        if 'mesh' in field.ncattrs():
+            mesh_names.add(field.getncattr('mesh'))
+        else:
+            msg = f'Field {field.name} does not have required attribute "mesh"'
+            logging.warning(msg)
+    ugrid_dim_subs = {}
+    for mesh_name in mesh_names:
+        ugrid_dim_subs[mesh_name + '_node'] = 'n' + output_mesh_name + '_node'
+        ugrid_dim_subs[mesh_name + '_edge'] = 'n' + output_mesh_name + '_edge'
+        ugrid_dim_subs[mesh_name + '_face'] = 'n' + output_mesh_name + '_face'
+
+    # Create previously undefined dimensions - these should be field component dimensions,
     # but there is no way to be sure, so report them to the user
     for dim in field_dims:
-        if not any(x in dim.name for x in ('node', 'edge', 'face') +
-                                          tuple(nc_file.dimensions.keys())):
-            msg = 'Adding previously undefined dimension {}'.format(dim.name)
+        if not any(x in dim.name for x in list(ugrid_dim_subs.keys()) +
+                   list(nc_file.dimensions.keys())):
+            msg = f'Adding previously undefined dimension "{dim.name}"'
             logging.info(msg)
             nc_file.createDimension(dim.name, dim.size)
 
+    logging.info('Writing field variables, this may take a while...')
+
     # Create new field variables in output file
     for field in fields:
-        # Substitute dimension names
+        # Substitute old UGRID dimension names with new names
         output_field_dims = []
         for dim in field.dimensions:
-            if dim.endswith('face'):
-                output_field_dims.append('n' + output_mesh_name + '_face')
-            elif dim.endswith('edge'):
-                output_field_dims.append('n' + output_mesh_name + '_edge')
-            elif dim.endswith('node'):
-                output_field_dims.append('n' + output_mesh_name + '_node')
-            else:
+            is_ugrid_dim = False
+            for old_ugrid_dim, new_ugrid_dim in ugrid_dim_subs.items():
+                if dim.endswith(old_ugrid_dim):
+                    output_field_dims.append(new_ugrid_dim)
+                    is_ugrid_dim = True
+            if not is_ugrid_dim:
                 output_field_dims.append(dim)
 
         field_var = nc_file.createVariable(field.name, field.datatype, output_field_dims)
 
         if field_var.shape != field.shape:
-            msg = 'Variable {}: shape does not match new field dimensions, '.format(field.name) + \
+            msg = f'Variable {field.name}: shape does not match new field dimensions, ' + \
                   repr(field.shape) + ' != ' + repr(field_var.shape)
             logging.critical(msg)
             raise RuntimeError()
@@ -279,6 +310,7 @@ def main():
 
     # Load LFRic outut file and retrieve data fields, vertical axes, and time variables
     infile = nc.Dataset(args.infile, 'r')
+    global_attrs = {attr : infile.getncattr(attr) for attr in infile.ncattrs()}
     fields = get_fields(infile)
     vert_axes = get_vertical_axes(infile)
     time_vars = get_time_vars(infile)
@@ -287,8 +319,9 @@ def main():
     meshfile = nc.Dataset(args.meshfile, 'r')
     ugrid_vars = get_ugrid_mesh_description(meshfile)
 
-    # Open output file and write variables and dimensions
+    # Open output file and write output data
     outfile = nc.Dataset(args.outfile, clobber=args.force, mode='w')
+    write_global_attrs(outfile, global_attrs, ' '.join(sys.argv))
     write_ugrid_vars(outfile, ugrid_vars, args.meshname)
     generate_edge_coords(outfile, args.meshname)
     write_vars(outfile, vert_axes)
