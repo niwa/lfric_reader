@@ -140,6 +140,29 @@ class ReplaceUGRIDMetadataUnitTest(unittest.TestCase):
         nc_file.close()
 
 
+    def test_write_global_attrs(self):
+        """
+        Unit test for write_global_attrs
+        """
+
+        nc_file = nc.Dataset('test_write_global_attrs.nc', clobber=False, mode='w', diskless=True,
+                             persist=False)
+        global_attrs = {'att1' : 1, 'att2' : 2}
+        cli_command = 'mytestcmd'
+        rum.write_global_attrs(nc_file, global_attrs, cli_command)
+
+        self.assertListEqual(nc_file.ncattrs(), list(global_attrs.keys()))
+        for attr, value in global_attrs.items():
+            self.assertEqual(nc_file.getncattr(attr), value)
+        self.assertIn(cli_command, nc_file.getncattr('history'))
+
+        # Check if appending history attribute works
+        global_attrs['history'] = 'blabla'
+        rum.write_global_attrs(nc_file, global_attrs, cli_command)
+        self.assertIn(cli_command, nc_file.getncattr('history'))
+        self.assertIn(global_attrs['history'], nc_file.getncattr('history'))
+
+
     def test_write_ugrid_vars(self):
         """
         Unit test for write_ugrid_vars
@@ -281,16 +304,18 @@ class ReplaceUGRIDMetadataUnitTest(unittest.TestCase):
 
         nc_file_src = nc.Dataset('test_write_field_vars_src.nc', clobber=False, mode='w',
                                  diskless=True, persist=False)
-        nc_file_src.createDimension('node', 4)
-        nc_file_src.createDimension('edge', 4)
-        nc_file_src.createDimension('face', 1)
+        nc_file_src.createDimension('nMesh2d_node', 4)
+        nc_file_src.createDimension('nMesh2d_edge', 4)
+        nc_file_src.createDimension('nMesh2d_face', 1)
         nc_file_src.createDimension('component_dim', 1)
         var_list = []
-        var_list.append(nc_file_src.createVariable('node_var', 'f', 'node'))
-        var_list.append(nc_file_src.createVariable('edge', 'f', 'edge'))
-        var_list.append(nc_file_src.createVariable('face_var', 'f', ('face', 'component_dim')))
-        var_list[-1].setncattr('mesh', 'Mesh2d')
+        var_list.append(nc_file_src.createVariable('node_var', 'f', 'nMesh2d_node'))
+        var_list.append(nc_file_src.createVariable('edge', 'f', 'nMesh2d_edge'))
+        var_list.append(nc_file_src.createVariable('face_var', 'f',
+                                                   ('nMesh2d_face', 'component_dim')))
         var_list[-1].setncattr('coordinates', 'Mesh2d_face_x Mesh2d_face_y')
+        for var in var_list:
+            var.setncattr('mesh', 'Mesh2d')
 
         nc_file_dst = nc.Dataset('test_write_field_vars_dst.nc', clobber=False, mode='w',
                                  diskless=True, persist=False)
