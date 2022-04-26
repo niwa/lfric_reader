@@ -2,6 +2,17 @@
 
 This project implements a file reader for LFRic output files in netCDF UGRID format.
 
+## Installing the reader
+
+The LFRic netCDF reader is available as a conda-forge package for Linux, Windows, and macOS (https://anaconda.org/conda-forge/lfric_reader). It can be easily installed by running the command
+```
+conda install -c conda-forge lfric_reader
+```
+This will install the ParaView package and all other dependencies automatically. Note that conda-forge currently provides two variants of the ParaView package, "qt", which comes with the ParaView GUI, and "egl", which is useful for "headless" operation and does not provide the GUI. It is easily possible to request a particular variant by running, e.g.,
+```
+conda install -c conda-forge lfric_reader paraview=*=*qt
+```
+
 ## Building the reader
 
 To build the reader, you need to have an installation of ParaView on your system. The directories with the ParaView installation need to allow write access as a plugin description file will need to be written at build time. You can either install the reader directly in your ParaView installation, or install it in any other place that can be accessed by ParaView (or ParaView Server, if you run a client-server configuration).
