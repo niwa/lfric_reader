@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include <algorithm>
+#include <iostream>
 
 #define errorMacro(x) std::cerr << x
 #ifdef DEBUG

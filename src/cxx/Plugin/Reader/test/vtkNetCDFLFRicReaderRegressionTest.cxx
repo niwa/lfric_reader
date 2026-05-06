@@ -314,7 +314,7 @@ TEST_CASE( "Cell Data Fields", "[regression]" )
           }
           else
           {
-            valid &= isnan(dataArray->GetComponent(iLevel*faceLen+iFace, iComp));
+            valid &= std::isnan(dataArray->GetComponent(iLevel*faceLen+iFace, iComp));
           }
         }
       }
